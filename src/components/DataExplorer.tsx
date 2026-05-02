@@ -1,426 +1,467 @@
 import { useState } from 'react'
 import {
-  AlertTriangle, CheckCircle, XCircle, Mail, Shield, User,
-  Globe, Clock, TrendingUp, ChevronRight, AlertCircle,
+  Mail, Database, Globe, User, Shield, FileText,
+  Server, ChevronRight,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { BEC_CASES } from '../data/becCases'
 import type { BECCase } from '../types'
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+// ── Source system definitions ─────────────────────────────────────────────────
 
-const SEVERITY_STYLES = {
-  critical: { dot: 'bg-red-500',    badge: 'bg-red-50 text-red-700 border-red-200',         label: 'Critical' },
-  high:     { dot: 'bg-orange-500', badge: 'bg-orange-50 text-orange-700 border-orange-200', label: 'High' },
-  medium:   { dot: 'bg-amber-400',  badge: 'bg-amber-50 text-amber-700 border-amber-200',    label: 'Medium' },
+const SOURCES = [
+  { id: 'wire',     name: 'Wire Processing',       color: 'blue',   cats: [1] },
+  { id: 'core',     name: 'Core Banking',           color: 'indigo', cats: [1] },
+  { id: 'swift',    name: 'SWIFT Network',          color: 'violet', cats: [1, 5] },
+  { id: 'crm',      name: 'CRM',                    color: 'purple', cats: [2, 3] },
+  { id: 'txdb',     name: 'Transaction History DB', color: 'fuchsia',cats: [2] },
+  { id: 'email',    name: 'Email Gateway / MTA',    color: 'pink',   cats: [3] },
+  { id: 'nlp',      name: 'NLP Engine',             color: 'rose',   cats: [3] },
+  { id: 'domain',   name: 'Domain Intelligence',    color: 'orange', cats: [3, 5] },
+  { id: 'iam',      name: 'IAM / Active Directory', color: 'amber',  cats: [4] },
+  { id: 'siem',     name: 'SIEM',                   color: 'yellow', cats: [4] },
+  { id: 'ip',       name: 'IP Reputation',          color: 'lime',   cats: [4, 5] },
+  { id: 'fincen',   name: 'FinCEN 314(b)',          color: 'green',  cats: [5] },
+  { id: 'sanction', name: 'Sanctions Screening',    color: 'emerald',cats: [5] },
+  { id: 'case',     name: 'Case Management',        color: 'teal',   cats: [6] },
+] as const
+
+type SourceId = typeof SOURCES[number]['id']
+
+const SOURCE_CHIP: Record<string, string> = {
+  blue:    'bg-blue-50 text-blue-700 border-blue-200',
+  indigo:  'bg-indigo-50 text-indigo-700 border-indigo-200',
+  violet:  'bg-violet-50 text-violet-700 border-violet-200',
+  purple:  'bg-purple-50 text-purple-700 border-purple-200',
+  fuchsia: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200',
+  pink:    'bg-pink-50 text-pink-700 border-pink-200',
+  rose:    'bg-rose-50 text-rose-700 border-rose-200',
+  orange:  'bg-orange-50 text-orange-700 border-orange-200',
+  amber:   'bg-amber-50 text-amber-700 border-amber-200',
+  yellow:  'bg-yellow-50 text-yellow-700 border-yellow-200',
+  lime:    'bg-lime-50 text-lime-700 border-lime-200',
+  green:   'bg-green-50 text-green-700 border-green-200',
+  emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  teal:    'bg-teal-50 text-teal-700 border-teal-200',
 }
 
-const STATUS_STYLES = {
-  blocked: 'bg-red-50 text-red-700 border-red-200',
-  flagged: 'bg-amber-50 text-amber-700 border-amber-200',
-  cleared: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-}
-
-const SCORE_COLOR = (s: number) =>
-  s >= 80 ? 'text-red-600' : s >= 60 ? 'text-orange-600' : s >= 40 ? 'text-amber-600' : 'text-emerald-700'
-
-const SCORE_BAR = (s: number) =>
-  s >= 80 ? 'bg-red-500' : s >= 60 ? 'bg-orange-500' : s >= 40 ? 'bg-amber-400' : 'bg-emerald-500'
-
-function fmt(n: number) {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`
-  return `$${n.toLocaleString()}`
-}
-
-function AuthBadge({ status }: { status: 'pass' | 'fail' }) {
-  return status === 'pass'
-    ? <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"><CheckCircle className="w-2.5 h-2.5" /> PASS</span>
-    : <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-xs font-bold bg-red-50 text-red-700 border border-red-200"><XCircle className="w-2.5 h-2.5" /> FAIL</span>
-}
-
-function Flag({ ok, label }: { ok: boolean; label: string }) {
+function SourceTag({ id }: { id: SourceId }) {
+  const src = SOURCES.find(s => s.id === id)!
   return (
-    <div className="flex items-start gap-1.5 text-xs">
-      {ok
-        ? <CheckCircle className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
-        : <XCircle className="w-3.5 h-3.5 text-red-500 shrink-0 mt-0.5" />}
-      <span className={ok ? 'text-slate-600' : 'text-red-700 font-medium'}>{label}</span>
-    </div>
+    <span className={clsx('inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded border font-medium shrink-0', SOURCE_CHIP[src.color])}>
+      <Server className="w-2.5 h-2.5" />
+      {src.name}
+    </span>
   )
 }
 
-function NlpScore({ label, value }: { label: string; value: number }) {
-  const pct = Math.round(value * 100)
-  const color = pct >= 70 ? 'bg-red-500' : pct >= 45 ? 'bg-orange-400' : 'bg-emerald-500'
+// ── Data row primitives ───────────────────────────────────────────────────────
+
+function Row({ label, value, src, mono }: { label: string; value: React.ReactNode; src?: SourceId; mono?: boolean }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-slate-500 w-20 shrink-0">{label}</span>
-      <div className="flex-1 bg-slate-100 rounded-full h-1.5">
-        <div className={clsx('h-1.5 rounded-full', color)} style={{ width: `${pct}%` }} />
+    <div className="flex items-start justify-between gap-3 py-2 border-b border-slate-50 last:border-0">
+      <span className="text-xs text-slate-400 shrink-0 w-44">{label}</span>
+      <div className="flex items-center gap-2 flex-1 justify-end">
+        <span className={clsx('text-xs text-slate-800 text-right', mono && 'font-mono')}>{value}</span>
+        {src && <SourceTag id={src} />}
       </div>
-      <span className={clsx('text-xs font-mono font-bold w-8 text-right',
-        pct >= 70 ? 'text-red-600' : pct >= 45 ? 'text-orange-600' : 'text-emerald-700')}>
-        {pct}%
-      </span>
     </div>
   )
 }
 
-// ── Email Card ────────────────────────────────────────────────────────────────
+function SectionHeading({ title }: { title: string }) {
+  return <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-4 mb-2 first:mt-0">{title}</p>
+}
 
-function EmailCard({ email, externalIntel }: { email: BECCase['email']; externalIntel: BECCase['externalIntel'] }) {
-  const isDomainSuspect = email.senderDomainAgeDays < 90 || externalIntel.emailDomainIsLookalike
-
+function CardShell({ title, icon, sources, children }: {
+  title: string
+  icon: React.ReactNode
+  sources: SourceId[]
+  children: React.ReactNode
+}) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
-        <Mail className="w-4 h-4 text-slate-500 shrink-0" />
-        <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Triggering Email</span>
-        <span className="ml-auto text-xs text-slate-400 font-mono">{email.receivedAt}</span>
+      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200 flex-wrap gap-y-2">
+        <span className="text-slate-400 shrink-0">{icon}</span>
+        <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">{title}</span>
+        <div className="ml-auto flex flex-wrap gap-1.5">
+          {sources.map(id => <SourceTag key={id} id={id} />)}
+        </div>
       </div>
+      <div className="px-4 py-3">{children}</div>
+    </div>
+  )
+}
 
-      {isDomainSuspect && (
-        <div className="flex items-start gap-2 px-4 py-2.5 bg-red-50 border-b border-red-200">
-          <AlertTriangle className="w-3.5 h-3.5 text-red-600 mt-0.5 shrink-0" />
-          <div className="text-xs text-red-700">
-            <span className="font-bold">Lookalike domain — </span>
-            <span className="font-mono bg-red-100 px-1 rounded">{email.senderAddress.split('@')[1]}</span>
-            {' '}registered {email.senderDomainAgeDays} days ago, spoofing{' '}
-            <span className="font-mono bg-red-100 px-1 rounded">{externalIntel.lookalikeDomain ?? email.legitimateDomain}</span>
-          </div>
-        </div>
-      )}
+// ── Entity type colours (neutral, not risk-based) ─────────────────────────────
 
-      <div className="p-4 space-y-4">
-        {/* Email header fields */}
-        <div className="space-y-1.5 text-xs">
-          <div className="flex gap-2">
-            <span className="text-slate-400 w-16 shrink-0">From</span>
-            <div>
-              <span className="font-semibold text-slate-800">{email.senderName}</span>
-              <span className={clsx('ml-1.5 font-mono',
-                isDomainSuspect ? 'text-red-600 font-bold' : 'text-slate-500')}>
-                &lt;{email.senderAddress}&gt;
+const ENTITY_STYLE: Record<string, string> = {
+  amount:      'bg-blue-100 text-blue-800 border-blue-300',
+  account:     'bg-violet-100 text-violet-800 border-violet-300',
+  person:      'bg-amber-100 text-amber-800 border-amber-300',
+  institution: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+  deadline:    'bg-orange-100 text-orange-800 border-orange-300',
+  location:    'bg-slate-100 text-slate-700 border-slate-300',
+}
+
+// ── Tab 3 — Email & Communications ────────────────────────────────────────────
+
+function EmailTab({ c }: { c: BECCase }) {
+  const { email: e, nlpAnalysis: n } = c
+
+  return (
+    <div className="space-y-4">
+
+      {/* Email body with NER highlighting */}
+      <CardShell title="Message Body — Named Entity Extraction" icon={<Mail className="w-3.5 h-3.5" />} sources={['email', 'nlp']}>
+        <div className="bg-slate-50 rounded-lg p-3 border border-slate-100 text-xs text-slate-700 leading-relaxed whitespace-pre-wrap mb-3">
+          {e.bodySegments.map((seg, i) =>
+            seg.entityType ? (
+              <span
+                key={i}
+                title={seg.entityType}
+                className={clsx('rounded px-0.5 border cursor-default', ENTITY_STYLE[seg.entityType])}
+              >
+                {seg.text}
               </span>
-            </div>
-          </div>
-          {email.replyToAddress && (
-            <div className="flex gap-2">
-              <span className="text-slate-400 w-16 shrink-0">Reply-To</span>
-              <span className="font-mono text-orange-700 font-semibold">{email.replyToAddress}</span>
-              <span className="text-orange-600 text-xs">(differs from sender)</span>
-            </div>
-          )}
-          <div className="flex gap-2">
-            <span className="text-slate-400 w-16 shrink-0">Subject</span>
-            <span className="font-semibold text-slate-800">{email.subject}</span>
-          </div>
-          <div className="flex gap-2">
-            <span className="text-slate-400 w-16 shrink-0">Origin IP</span>
-            <span className={clsx('font-mono text-xs', email.ipFlagged ? 'text-red-600 font-bold' : 'text-slate-600')}>
-              {email.originatingIP}{email.ipFlagged ? ' ⚠ FLAGGED' : ''}
-            </span>
-          </div>
-        </div>
-
-        {/* Auth badges */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-xs text-slate-400 font-medium mr-1">Authentication:</span>
-          <span className="text-xs text-slate-500">DKIM</span><AuthBadge status={email.dkim} />
-          <span className="text-xs text-slate-500">SPF</span><AuthBadge status={email.spf} />
-          <span className="text-xs text-slate-500">DMARC</span><AuthBadge status={email.dmarc} />
-          {email.isFirstContact && (
-            <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 font-semibold">
-              First contact from sender
-            </span>
+            ) : (
+              <span key={i}>{seg.text}</span>
+            )
           )}
         </div>
+        <div className="flex flex-wrap gap-2 text-xs text-slate-500 border-t border-slate-100 pt-2">
+          <span className="font-medium text-slate-600">Entity legend:</span>
+          {Object.entries(ENTITY_STYLE).map(([type, cls]) => (
+            <span key={type} className={clsx('px-1.5 py-0.5 rounded border', cls)}>{type}</span>
+          ))}
+        </div>
+      </CardShell>
 
-        {/* Email body with highlighted phrases */}
-        <div className="bg-slate-50 rounded-lg p-3 border border-slate-200">
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Message Body</p>
-          <div className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
-            {email.bodySegments.map((seg, i) =>
-              seg.flagged ? (
-                <span
-                  key={i}
-                  title={seg.flagReason}
-                  className="bg-red-100 text-red-800 font-semibold rounded px-0.5 cursor-help border-b-2 border-red-400"
-                >
-                  {seg.text}
-                </span>
-              ) : (
-                <span key={i}>{seg.text}</span>
-              )
-            )}
-          </div>
-          <div className="mt-2 flex flex-wrap gap-1">
-            {email.bodySegments.filter(s => s.flagged).map((seg, i) => (
-              <span key={i} className="text-xs bg-red-50 border border-red-200 text-red-700 px-1.5 py-0.5 rounded">
-                ⚑ {seg.flagReason}
-              </span>
+      {/* Header metadata */}
+      <CardShell title="Header & Routing Metadata" icon={<Server className="w-3.5 h-3.5" />} sources={['email', 'domain']}>
+        <SectionHeading title="Sender" />
+        <Row label="Sender name" value={e.senderName} src="email" />
+        <Row label="Sender address" value={e.senderAddress} src="email" mono />
+        <Row label="Reply-To address" value={e.replyToAddress ?? 'Same as sender'} src="email" mono />
+        <Row label="Subject" value={e.subject} src="email" />
+        <Row label="Received at" value={e.receivedAt} src="email" />
+        <Row label="Email size" value={`${e.emailSizeKB} KB`} src="email" />
+        <Row label="Content type" value={e.contentType} src="email" mono />
+        <Row label="Attachments" value={e.attachments.length > 0 ? e.attachments.join(', ') : 'None'} src="email" />
+
+        <SectionHeading title="Authentication" />
+        <Row label="DKIM" value={e.dkim.toUpperCase()} src="email" mono />
+        <Row label="SPF" value={e.spf.toUpperCase()} src="email" mono />
+        <Row label="DMARC" value={e.dmarc.toUpperCase()} src="email" mono />
+
+        <SectionHeading title="Routing" />
+        <Row label="Originating IP" value={e.originatingIP} src="email" mono />
+        <Row label="Mail server path" value={
+          <div className="text-right space-y-0.5">
+            {e.mailServerPath.map((hop, i) => (
+              <div key={i} className="flex items-center gap-1 justify-end text-xs font-mono text-slate-600">
+                {i > 0 && <ChevronRight className="w-3 h-3 text-slate-300" />}
+                {hop}
+              </div>
             ))}
           </div>
-        </div>
+        } src="email" />
 
-        {/* NLP analysis */}
-        <div>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">NLP Signal Analysis</p>
-          <div className="space-y-1.5">
-            <NlpScore label="Urgency" value={email.urgencyScore} />
-            <NlpScore label="Authority" value={email.authorityScore} />
-            <NlpScore label="Override" value={email.overrideLanguageDetected ? 0.92 : 0.08} />
-          </div>
-          {email.attachments.length > 0 && (
-            <div className="mt-2.5 flex flex-wrap gap-1.5">
-              {email.attachments.map(a => (
-                <span key={a} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded border border-slate-200 font-mono">
-                  📎 {a}
-                </span>
-              ))}
+        <SectionHeading title="Domain Intelligence" />
+        <Row label="Sender domain" value={e.senderAddress.split('@')[1]} src="domain" mono />
+        <Row label="Domain age" value={`${e.senderDomainAgeDays} days`} src="domain" />
+        <Row label="Registration date" value={e.senderDomainRegistrationDate} src="domain" />
+        <Row label="Registrar" value={e.senderDomainRegistrar} src="domain" />
+        <Row label="Resembles domain" value={e.legitimateDomain} src="domain" mono />
+
+        <SectionHeading title="Communication History" />
+        <Row label="Prior emails from this sender" value={e.totalEmailsFromSender.toString()} src="crm" />
+        <Row label="Prior emails from this domain" value={e.totalEmailsFromDomain.toString()} src="crm" />
+        <Row label="First contact from sender" value={e.isFirstContact ? 'Yes' : 'No'} src="crm" />
+      </CardShell>
+
+      {/* NLP Analysis */}
+      <CardShell title="NLP Analysis" icon={<Database className="w-3.5 h-3.5" />} sources={['nlp']}>
+        <SectionHeading title="Language & Style" />
+        <Row label="Detected language" value={`${n.detectedLanguage} (confidence ${Math.round(n.languageConfidence * 100)}%)`} src="nlp" />
+        <Row label="Primary tone" value={n.primaryTone} src="nlp" />
+        <Row label="Secondary tone" value={n.secondaryTone} src="nlp" />
+        <Row label="Sentiment score" value={`${n.sentiment.toFixed(2)} (${n.sentimentLabel})`} src="nlp" />
+        <Row label="Writing style consistency" value={
+          <div className="flex items-center gap-2">
+            <div className="w-20 bg-slate-100 rounded-full h-1.5">
+              <div className="h-1.5 rounded-full bg-slate-500" style={{ width: `${n.writingStyleConsistency * 100}%` }} />
             </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
+            <span className="font-mono text-xs">{Math.round(n.writingStyleConsistency * 100)}%</span>
+          </div>
+        } src="nlp" />
+        <Row label="Baseline samples used" value={`${n.histStyleBaselineSamples} historical emails`} src="nlp" />
 
-// ── Data Category Cards ───────────────────────────────────────────────────────
+        <SectionHeading title="Grammar & Readability" />
+        <Row label="Grammatical errors" value={n.grammaticalErrorCount.toString()} src="nlp" />
+        {n.grammaticalErrorExamples.length > 0 && (
+          <div className="ml-2 mb-2">
+            {n.grammaticalErrorExamples.map((ex, i) => (
+              <div key={i} className="text-xs text-slate-500 italic border-l-2 border-slate-200 pl-2 mb-1">{ex}</div>
+            ))}
+          </div>
+        )}
+        <Row label="Spelling errors" value={n.spellingErrorCount.toString()} src="nlp" />
+        <Row label="Vocabulary sophistication" value={n.vocabularySophistication} src="nlp" />
+        <Row label="Avg sentence length" value={`${n.avgSentenceLength} words`} src="nlp" />
+        <Row label="Passive voice ratio" value={`${Math.round(n.passiveVoiceRatio * 100)}%`} src="nlp" />
+        <Row label="Readability score" value={`${n.readabilityScore} / 100 (Flesch-Kincaid)`} src="nlp" />
 
-function InstructionCard({ c }: { c: BECCase }) {
-  const { instruction: i } = c
-  const deviationX = Math.round(i.amount / i.historicalAvg)
-  return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
-        <TrendingUp className="w-3.5 h-3.5 text-blue-500" />
-        <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Cat 1 — Payment Instruction</span>
-      </div>
-      <div className="p-4 space-y-3">
-        <div className={clsx('rounded-lg p-3 border',
-          deviationX >= 5 ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200')}>
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className={clsx('text-lg font-bold font-mono', deviationX >= 5 ? 'text-red-700' : 'text-slate-800')}>
-              {i.currency} {fmt(i.amount)}
-            </span>
-            {deviationX >= 2 && (
-              <span className="text-xs font-bold text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full">
-                {deviationX}× historical avg
-              </span>
+        <SectionHeading title="Signal Phrase Counts" />
+        <Row label="Word count" value={n.wordCount.toString()} src="nlp" />
+        <Row label="Paragraphs" value={n.paragraphCount.toString()} src="nlp" />
+        <Row label="Questions" value={n.questionCount.toString()} src="nlp" />
+        <Row label="Exclamations" value={n.exclamationCount.toString()} src="nlp" />
+        <Row label="ALL-CAPS words" value={n.capsWordCount.toString()} src="nlp" />
+
+        <SectionHeading title="Extracted Signal Phrases" />
+        {[
+          { label: 'Urgency phrases', items: n.urgencyPhrases },
+          { label: 'Secrecy phrases', items: n.secrecyPhrases },
+          { label: 'Authority claims', items: n.authorityPhrases },
+          { label: 'Override requests', items: n.overridePhrases },
+        ].map(({ label, items }) => (
+          <div key={label} className="mb-2">
+            <div className="text-xs text-slate-400 mb-1">{label} ({items.length})</div>
+            {items.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {items.map((p, i) => (
+                  <span key={i} className="text-xs bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 italic">
+                    "{p}"
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <span className="text-xs text-slate-300 italic">None detected</span>
             )}
           </div>
-          <div className="text-xs text-slate-400 mt-0.5">Avg: {fmt(i.historicalAvg)} · Max ever: {fmt(i.historicalMax)}</div>
-        </div>
+        ))}
 
-        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-          {[
-            ['Channel', i.channel],
-            ['Time', i.submittedAt.split(' ')[1]],
-            ['Beneficiary', i.beneficiaryName],
-            ['Country', i.beneficiaryCountry],
-            ['Bank', i.beneficiaryBank],
-            ['Account', i.beneficiaryAccount],
-          ].map(([label, value]) => (
-            <div key={label} className="flex gap-1.5">
-              <span className="text-slate-400 shrink-0 w-16">{label}</span>
-              <span className="text-slate-700 font-medium truncate">{value}</span>
+        <SectionHeading title="Extracted Entities" />
+        <div className="space-y-1.5">
+          {n.extractedEntities.map((ent, i) => (
+            <div key={i} className="flex items-center justify-between gap-3 text-xs">
+              <span className={clsx('px-1.5 py-0.5 rounded border shrink-0', ENTITY_STYLE[ent.type])}>{ent.type}</span>
+              <span className="font-mono text-slate-700 flex-1 truncate">{ent.value}</span>
+              <span className="text-slate-400 shrink-0">conf {Math.round(ent.confidence * 100)}%</span>
             </div>
           ))}
         </div>
-
-        <div className="space-y-1">
-          <Flag ok={!i.beneficiaryIsNew} label={i.beneficiaryIsNew ? 'New beneficiary — never paid before' : 'Known beneficiary'} />
-          <Flag ok={!i.submittedOutsideHours} label={i.submittedOutsideHours ? 'Submitted outside business hours' : 'Within business hours'} />
-          <Flag ok={!i.selfApproved} label={i.selfApproved ? `Self-approved by ${i.submittedBy}` : 'Dual-authorisation followed'} />
-          <Flag ok={i.dualAuthFollowed} label={i.dualAuthFollowed ? 'Dual authorisation confirmed' : 'Dual authorisation bypassed'} />
-          <Flag ok={!i.modifiedAfterEntry} label={i.modifiedAfterEntry ? 'Instruction modified after initial entry' : 'No post-entry modifications'} />
-        </div>
-
-        {i.freeTextNotes && (
-          <div className="text-xs bg-amber-50 border border-amber-200 rounded-lg p-2 text-amber-800 italic">
-            Notes: "{i.freeTextNotes}"
-          </div>
-        )}
-      </div>
+      </CardShell>
     </div>
   )
 }
 
-function RelationshipCard({ c }: { c: BECCase }) {
-  const { relationship: r, instruction: i } = c
-  const geoAnomaly = !r.typicalCountries.includes(i.beneficiaryCountry)
+// ── Tab 1 — Payment Instruction ───────────────────────────────────────────────
+
+function InstructionTab({ c }: { c: BECCase }) {
+  const i = c.instruction
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
-        <Globe className="w-3.5 h-3.5 text-violet-500" />
-        <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Cat 2 — Counterparty History</span>
-      </div>
-      <div className="p-4 space-y-3">
-        <div>
-          <div className="text-sm font-bold text-slate-900">{r.clientName}</div>
-          <div className="text-xs text-slate-400">{r.tenureYears}-year client · {r.totalPaymentsLast12M} wires in past 12 months</div>
-        </div>
+    <div className="space-y-4">
+      <CardShell title="Instruction Metadata" icon={<FileText className="w-3.5 h-3.5" />} sources={['wire', 'core']}>
+        <Row label="Instruction ID" value={i.instructionId} src="wire" mono />
+        <Row label="Source system" value={i.sourceSystem} src="wire" />
+        <Row label="Channel" value={i.channel} src="wire" />
+        <Row label="Submitted at" value={i.submittedAt} src="wire" />
+        <Row label="Outside business hours" value={i.submittedOutsideHours ? 'Yes' : 'No'} src="wire" />
+        <Row label="Device fingerprint" value={i.deviceFingerprint} src="core" mono />
+        <Row label="Modified after entry" value={i.modifiedAfterEntry ? 'Yes' : 'No'} src="wire" />
+        <Row label="Approval workflow time" value={`${i.approvalWorkflowMinutes} minutes`} src="wire" />
+        <Row label="Dual authorisation followed" value={i.dualAuthFollowed ? 'Yes' : 'No'} src="wire" />
+        <Row label="Submitted by" value={i.submittedBy} src="core" />
+        <Row label="Approved by" value={i.approvedBy} src="core" />
+        <Row label="Self-approved" value={i.selfApproved ? 'Yes' : 'No'} src="wire" />
+      </CardShell>
 
-        <div className="bg-slate-50 rounded-lg p-3 space-y-1.5 text-xs border border-slate-200">
-          <div className="flex justify-between">
-            <span className="text-slate-400">Typical wire range</span>
-            <span className="text-slate-700 font-semibold">{fmt(r.typicalAmountMin)} – {fmt(r.typicalAmountMax)}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-400">Typical countries</span>
-            <span className="text-slate-700 text-right">{r.typicalCountries.join(', ')}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-400">Channels</span>
-            <span className="text-slate-700">{r.typicalChannels.join(', ')}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-slate-400">Last payment</span>
-            <span className="text-slate-700">{r.lastPaymentDate}</span>
-          </div>
-        </div>
+      <CardShell title="Beneficiary Details" icon={<Globe className="w-3.5 h-3.5" />} sources={['wire', 'swift']}>
+        <Row label="Beneficiary name" value={i.beneficiaryName} src="wire" />
+        <Row label="Account number" value={i.beneficiaryAccount} src="wire" mono />
+        <Row label="Beneficiary bank" value={i.beneficiaryBank} src="swift" />
+        <Row label="Beneficiary country" value={i.beneficiaryCountry} src="swift" />
+        <Row label="New beneficiary" value={i.beneficiaryIsNew ? 'Yes — first payment to this account' : 'No'} src="core" />
+        <Row label="Days since last payment to beneficiary" value={i.daysSinceLastPaymentToBeneficiary !== null ? `${i.daysSinceLastPaymentToBeneficiary} days` : 'N/A — first ever'} src="core" />
+        <Row label="Reference text" value={i.referenceText} src="wire" mono />
+        <Row label="Free-text notes" value={i.freeTextNotes || 'None'} src="wire" />
+      </CardShell>
 
-        {geoAnomaly && (
-          <div className="flex items-center gap-1.5 text-xs bg-orange-50 border border-orange-200 rounded-lg p-2 text-orange-800">
-            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-            <span><strong>{i.beneficiaryCountry}</strong> outside typical counterparty geography</span>
-          </div>
-        )}
-
-        <div className="space-y-1">
-          <Flag ok={r.rmConsulted} label={r.rmConsulted ? `RM ${r.rmName} consulted` : `RM ${r.rmName} not consulted on this instruction`} />
-        </div>
-      </div>
+      <CardShell title="Amount Analysis" icon={<Database className="w-3.5 h-3.5" />} sources={['wire', 'core']}>
+        <Row label="Amount" value={`${i.currency} ${i.amount.toLocaleString()}`} src="wire" mono />
+        <Row label="Currency" value={i.currency} src="wire" />
+        <Row label="Historical average (this client)" value={`${i.currency} ${i.historicalAvg.toLocaleString()}`} src="core" />
+        <Row label="Historical maximum (this client)" value={`${i.currency} ${i.historicalMax.toLocaleString()}`} src="core" />
+        <Row label="Amount deviation factor" value={`${i.amountDeviationFactor.toFixed(1)}× historical average`} src="core" />
+        <Row label="Round number pattern" value={i.roundNumberFlag ? 'Yes' : 'No'} src="core" />
+        <Row label="Just-below-threshold pattern" value={i.belowThresholdFlag ? 'Yes' : 'No'} src="wire" />
+      </CardShell>
     </div>
   )
 }
 
-function IdentityCard({ c }: { c: BECCase }) {
-  const { identity: id } = c
-  const locationAnomaly = id.loginLocation !== id.expectedLocation
+// ── Tab 2 — Counterparty & Relationship ──────────────────────────────────────
+
+function RelationshipTab({ c }: { c: BECCase }) {
+  const r = c.relationship
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
-        <User className="w-3.5 h-3.5 text-emerald-500" />
-        <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Cat 4 — Identity &amp; Access</span>
-      </div>
-      <div className="p-4 space-y-3">
-        <div>
-          <div className="text-sm font-bold text-slate-900">{id.submittingUser}</div>
-          <div className="text-xs text-slate-400 font-mono">{id.userId} · Login at {id.loginTime.split(' ')[1]}</div>
-        </div>
+    <div className="space-y-4">
+      <CardShell title="Client Profile" icon={<User className="w-3.5 h-3.5" />} sources={['crm']}>
+        <Row label="Client name" value={r.clientName} src="crm" />
+        <Row label="Industry" value={r.clientIndustry} src="crm" />
+        <Row label="Relationship tenure" value={`${r.tenureYears} years`} src="crm" />
+        <Row label="Relationship manager" value={r.rmName} src="crm" />
+        <Row label="RM consulted on this instruction" value={r.rmConsulted ? 'Yes' : 'No'} src="crm" />
+      </CardShell>
 
-        {locationAnomaly && (
-          <div className="flex items-start gap-1.5 text-xs bg-red-50 border border-red-200 rounded-lg p-2 text-red-800">
-            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-            <div>Login from <strong>{id.loginLocation}</strong> — expected <strong>{id.expectedLocation}</strong></div>
-          </div>
-        )}
+      <CardShell title="Historical Payment Patterns" icon={<Database className="w-3.5 h-3.5" />} sources={['txdb', 'crm']}>
+        <SectionHeading title="Baseline" />
+        <Row label="Typical amount range" value={`$${(c.relationship.typicalAmountMin / 1000).toFixed(0)}K – $${(c.relationship.typicalAmountMax / 1_000_000).toFixed(1)}M`} src="txdb" />
+        <Row label="Avg payment frequency" value={`Every ${r.avgPaymentFrequencyDays} days`} src="txdb" />
+        <Row label="Total payments (last 12 months)" value={r.totalPaymentsLast12M.toString()} src="txdb" />
+        <Row label="Last payment date" value={r.lastPaymentDate} src="txdb" />
+        <Row label="Counterparty registry entries" value={`${r.counterpartyRegistryCount} known counterparties`} src="txdb" />
 
-        <div className="space-y-1">
-          <Flag ok={!id.deviceIsNew} label={id.deviceIsNew ? 'Unrecognised device' : 'Known device'} />
-          <Flag ok={!locationAnomaly} label={locationAnomaly ? `Location anomaly: ${id.loginLocation}` : `Expected location: ${id.loginLocation}`} />
-          <Flag ok={id.mfaUsed} label={id.mfaUsed ? 'MFA verified' : 'MFA not used — account compromise risk'} />
-          <Flag ok={id.approvalAuthoritySufficient} label={id.approvalAuthoritySufficient ? 'Approver authority sufficient' : 'Insufficient authority for this wire size'} />
-        </div>
+        <SectionHeading title="Geographic & Channel Patterns" />
+        <Row label="Typical beneficiary countries" value={r.typicalCountries.join(', ')} src="txdb" />
+        <Row label="Typical channels" value={r.typicalChannels.join(', ')} src="txdb" />
 
-        <div className="text-xs text-slate-500">
-          Session duration: <span className="font-semibold text-slate-700">{id.sessionDurationMinutes} min</span>
-        </div>
-      </div>
+        <SectionHeading title="This Instruction vs. Baseline" />
+        <Row label="Beneficiary country" value={c.instruction.beneficiaryCountry} src="txdb" />
+        <Row label="Country in baseline" value={r.typicalCountries.includes(c.instruction.beneficiaryCountry) ? 'Yes' : 'No — outside historical geography'} src="txdb" />
+        <Row label="Channel" value={c.instruction.channel} src="txdb" />
+        <Row label="Channel in baseline" value={r.typicalChannels.includes(c.instruction.channel) ? 'Yes' : 'No — unusual channel for this client'} src="txdb" />
+      </CardShell>
     </div>
   )
 }
 
-function ExternalIntelCard({ c }: { c: BECCase }) {
-  const { externalIntel: e } = c
+// ── Tab 4 — Identity & Access ────────────────────────────────────────────────
+
+function IdentityTab({ c }: { c: BECCase }) {
+  const id = c.identity
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 border-b border-slate-200">
-        <Shield className="w-3.5 h-3.5 text-red-500" />
-        <span className="text-xs font-bold text-slate-700 uppercase tracking-wide">Cat 5 — External Intelligence</span>
-      </div>
-      <div className="p-4 space-y-2">
-        <div className="space-y-1.5">
-          <Flag ok={!e.swiftControlsFlag} label={e.swiftControlsFlag ? 'SWIFT Payment Controls: FLAGGED' : 'SWIFT Payment Controls: Clear'} />
-          <Flag ok={!e.fincenMatch} label={e.fincenMatch ? `FinCEN 314(b): ${e.beneficiaryFraudSource ?? 'Match found'}` : 'FinCEN 314(b): No match'} />
-          <Flag ok={!e.ipFlagged} label={e.ipFlagged ? `IP flagged: ${e.ipFraudSource ?? 'Fraud database'}` : 'Originating IP: Clean'} />
-          <Flag ok={!e.beneficiaryFraudFlag} label={e.beneficiaryFraudFlag ? `Beneficiary: ${e.beneficiaryFraudSource}` : 'Beneficiary: No fraud history'} />
-          <Flag ok={!e.emailDomainIsLookalike} label={e.emailDomainIsLookalike ? `Domain spoofs: ${e.lookalikeDomain}` : 'Email domain: Legitimate'} />
-        </div>
-        <div className="pt-1 flex items-center gap-1.5 text-xs text-slate-500">
-          <Clock className="w-3 h-3" />
-          Email domain age:
-          <span className={clsx('font-semibold ml-0.5', e.emailDomainAgeDays < 30 ? 'text-red-600' : e.emailDomainAgeDays < 90 ? 'text-orange-600' : 'text-slate-700')}>
-            {e.emailDomainAgeDays} days
-          </span>
-        </div>
-      </div>
+    <div className="space-y-4">
+      <CardShell title="User Authentication" icon={<User className="w-3.5 h-3.5" />} sources={['iam', 'siem']}>
+        <SectionHeading title="Identity" />
+        <Row label="Submitting user" value={id.submittingUser} src="iam" />
+        <Row label="User ID" value={id.userId} src="iam" mono />
+        <Row label="Approval authority sufficient" value={id.approvalAuthoritySufficient ? 'Yes' : 'No — below wire authority threshold for this amount'} src="iam" />
+
+        <SectionHeading title="Authentication Event" />
+        <Row label="Login time" value={id.loginTime} src="siem" />
+        <Row label="MFA used" value={id.mfaUsed ? 'Yes' : 'No'} src="iam" />
+        <Row label="MFA method" value={id.mfaMethod} src="iam" />
+        <Row label="Prior failed logins (24h)" value={id.priorFailedLogins.toString()} src="siem" />
+      </CardShell>
+
+      <CardShell title="Device & Location" icon={<Globe className="w-3.5 h-3.5" />} sources={['siem', 'iam', 'ip']}>
+        <Row label="Device ID" value={id.deviceId} src="iam" mono />
+        <Row label="Device recognised" value={id.deviceIsNew ? 'No — first time seen' : 'Yes — known device'} src="iam" />
+        <Row label="Login location" value={id.loginLocation} src="ip" />
+        <Row label="Expected location" value={id.expectedLocation} src="siem" />
+        <Row label="Location matches baseline" value={id.loginLocation === id.expectedLocation ? 'Yes' : 'No'} src="siem" />
+        <Row label="VPN detected" value={id.vpnDetected ? 'Yes' : 'No'} src="ip" />
+      </CardShell>
+
+      <CardShell title="Session Behaviour" icon={<Database className="w-3.5 h-3.5" />} sources={['siem']}>
+        <Row label="Session duration" value={`${id.sessionDurationMinutes} minutes`} src="siem" />
+        <Row label="Pages visited in session" value={id.sessionPagesVisited.toString()} src="siem" />
+        <Row label="Approval workflow time" value={`${c.instruction.approvalWorkflowMinutes} minutes`} src="siem" />
+      </CardShell>
     </div>
   )
 }
 
-// ── Case Detail Panel ─────────────────────────────────────────────────────────
+// ── Tab 5 — External Intelligence ────────────────────────────────────────────
 
-function CaseDetail({ c }: { c: BECCase }) {
-  const sev = SEVERITY_STYLES[c.severity]
+function ExternalTab({ c }: { c: BECCase }) {
+  const e = c.externalIntel
   return (
-    <div className="flex-1 overflow-y-auto bg-slate-50">
-      <div className="p-5 space-y-4 max-w-5xl">
+    <div className="space-y-4">
+      <CardShell title="SWIFT Network Intelligence" icon={<Globe className="w-3.5 h-3.5" />} sources={['swift']}>
+        <Row label="SWIFT Payment Controls flag" value={e.swiftControlsFlag ? `Yes — ${e.ipFraudSource ?? 'flagged'}` : 'No match'} src="swift" />
+        <Row label="Beneficiary bank country risk" value={e.beneficiaryBankCountryRisk} src="swift" />
+      </CardShell>
 
-        {/* Header */}
-        <div className="bg-white rounded-xl border border-slate-200 p-4">
-          <div className="flex items-start justify-between flex-wrap gap-3">
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                <span className={clsx('w-2 h-2 rounded-full shrink-0', sev.dot)} />
-                <span className="text-xs font-mono text-slate-400">{c.id}</span>
-                <span className={clsx('text-xs font-semibold px-2 py-0.5 rounded-full border', sev.badge)}>{sev.label}</span>
-                <span className={clsx('text-xs font-semibold px-2 py-0.5 rounded-full border uppercase', STATUS_STYLES[c.status])}>{c.status}</span>
-                {c.signalId && (
-                  <span className="flex items-center gap-1 text-xs text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
-                    <ChevronRight className="w-3 h-3" /> Linked: {c.signalId}
-                  </span>
-                )}
-              </div>
-              <div className="text-base font-bold text-slate-900 truncate">
-                {c.relationship.clientName} → {c.instruction.beneficiaryName}
-              </div>
-              <div className="text-xs text-slate-500 mt-0.5">
-                {c.instruction.currency} {c.instruction.amount.toLocaleString()} · {c.instruction.beneficiaryBank}, {c.instruction.beneficiaryCountry} · {c.instruction.channel} · {c.createdAt}
-              </div>
-            </div>
+      <CardShell title="Network & IP Intelligence" icon={<Server className="w-3.5 h-3.5" />} sources={['ip', 'domain']}>
+        <SectionHeading title="Originating IP" />
+        <Row label="IP address" value={c.email.originatingIP} src="ip" mono />
+        <Row label="IP flagged in fraud database" value={e.ipFlagged ? 'Yes' : 'No'} src="ip" />
+        <Row label="Fraud source detail" value={e.ipFraudSource ?? 'N/A'} src="ip" />
+        <Row label="ASN" value={e.ipAsn} src="ip" mono />
+        <Row label="Geolocation" value={e.ipGeolocation} src="ip" />
 
-            <div className="text-center shrink-0">
-              <div className={clsx('text-3xl font-bold font-mono', SCORE_COLOR(c.anomalyScore))}>{c.anomalyScore}</div>
-              <div className="text-xs text-slate-400">Anomaly Score</div>
-              <div className="mt-1 w-16 bg-slate-200 rounded-full h-1.5 mx-auto">
-                <div className={clsx('h-1.5 rounded-full', SCORE_BAR(c.anomalyScore))} style={{ width: `${c.anomalyScore}%` }} />
-              </div>
-            </div>
-          </div>
+        <SectionHeading title="Email Domain" />
+        <Row label="Domain age" value={`${e.emailDomainAgeDays} days`} src="domain" />
+        <Row label="Resembles known domain" value={e.emailDomainIsLookalike ? `Yes — spoofing ${e.lookalikeDomain}` : 'No'} src="domain" />
+      </CardShell>
 
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {c.riskFlags.map(f => (
-              <span key={f} className="text-xs bg-red-50 text-red-700 border border-red-200 px-2 py-0.5 rounded-full font-medium">
-                {f.replace(/_/g, ' ')}
-              </span>
-            ))}
-          </div>
-        </div>
+      <CardShell title="Fraud & Sanctions Databases" icon={<Shield className="w-3.5 h-3.5" />} sources={['fincen', 'sanction']}>
+        <Row label="FinCEN 314(b) match" value={e.fincenMatch ? `Yes — ${e.beneficiaryFraudSource}` : 'No match'} src="fincen" />
+        <Row label="Beneficiary fraud flag" value={e.beneficiaryFraudFlag ? `Yes — ${e.beneficiaryFraudSource}` : 'No'} src="fincen" />
+        <Row label="OFAC match" value={e.ofacMatch ? 'Yes' : 'No match'} src="sanction" />
+        <Row label="Sanctions screening result" value={e.sanctionsScreeningResult} src="sanction" />
+      </CardShell>
+    </div>
+  )
+}
 
-        {/* Email — full width, prominent */}
-        <EmailCard email={c.email} externalIntel={c.externalIntel} />
+// ── Tab 6 — Outcome Data ──────────────────────────────────────────────────────
 
-        {/* 2 × 2 data categories */}
-        <div className="grid grid-cols-2 gap-4">
-          <InstructionCard c={c} />
-          <RelationshipCard c={c} />
-          <IdentityCard c={c} />
-          <ExternalIntelCard c={c} />
-        </div>
+function OutcomeTab({ c }: { c: BECCase }) {
+  const o = c.outcome
+  return (
+    <div className="space-y-4">
+      <CardShell title="Case Disposition" icon={<FileText className="w-3.5 h-3.5" />} sources={['case']}>
+        <Row label="Disposition" value={o.disposition} src="case" />
+        <Row label="Disposition date" value={o.dispositionDate ?? 'Pending'} src="case" />
+        <Row label="Resolution days" value={o.resolutionDays !== null ? o.resolutionDays.toString() : 'Ongoing'} src="case" />
+        <Row label="Investigator notes" value={
+          <div className="text-xs text-slate-700 italic text-right max-w-xs">{o.investigatorNotes}</div>
+        } src="case" />
+      </CardShell>
+
+      <CardShell title="Regulatory Reporting" icon={<Shield className="w-3.5 h-3.5" />} sources={['case']}>
+        <Row label="SAR filed" value={o.sarFiled ? 'Yes' : 'No'} src="case" />
+        <Row label="SAR reference" value={o.sarReference ?? 'N/A'} src="case" mono />
+        <Row label="RAT request filed" value={o.ratRequestFiled ? 'Yes' : 'No'} src="case" />
+        <Row label="RAT outcome" value={o.ratOutcome ?? 'N/A'} src="case" />
+        <Row label="Funds recovered" value={o.fundsRecovered ? `Yes — $${o.recoveredAmount?.toLocaleString()}` : 'No'} src="case" />
+      </CardShell>
+
+      <CardShell title="Model Feedback Loop" icon={<Database className="w-3.5 h-3.5" />} sources={['case']}>
+        <Row label="Model feedback label" value={o.modelFeedbackLabel} src="case" mono />
+        <Row label="Added to training data" value={o.addedToTrainingData ? 'Yes' : 'Pending review'} src="case" />
+      </CardShell>
+    </div>
+  )
+}
+
+// ── Connected Sources Strip ───────────────────────────────────────────────────
+
+function ConnectedSources({ activeTab }: { activeTab: number }) {
+  return (
+    <div className="px-5 py-3 bg-white border-b border-slate-200">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs font-semibold text-slate-400 shrink-0 mr-1">Connected sources:</span>
+        {SOURCES.map(src => {
+          const active = ([...src.cats] as number[]).includes(activeTab)
+          return (
+            <span
+              key={src.id}
+              className={clsx(
+                'inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border font-medium transition-all',
+                active ? SOURCE_CHIP[src.color] : 'bg-slate-50 text-slate-300 border-slate-200'
+              )}
+            >
+              <Server className="w-2.5 h-2.5" />
+              {src.name}
+            </span>
+          )
+        })}
       </div>
     </div>
   )
@@ -429,7 +470,6 @@ function CaseDetail({ c }: { c: BECCase }) {
 // ── Case List Item ────────────────────────────────────────────────────────────
 
 function CaseListItem({ c, isSelected, onSelect }: { c: BECCase; isSelected: boolean; onSelect: () => void }) {
-  const sev = SEVERITY_STYLES[c.severity]
   return (
     <button
       onClick={onSelect}
@@ -438,121 +478,121 @@ function CaseListItem({ c, isSelected, onSelect }: { c: BECCase; isSelected: boo
         isSelected ? 'bg-blue-50 border-l-2 border-l-blue-500' : 'hover:bg-slate-50'
       )}
     >
-      <div className="flex items-center justify-between mb-1">
-        <div className="flex items-center gap-1.5">
-          <span className={clsx('w-1.5 h-1.5 rounded-full shrink-0', sev.dot)} />
-          <span className="text-xs font-mono text-slate-400">{c.id}</span>
-        </div>
-        <span className={clsx('text-xs font-bold font-mono', SCORE_COLOR(c.anomalyScore))}>{c.anomalyScore}</span>
-      </div>
+      <div className="text-xs font-mono text-slate-400 mb-0.5">{c.id}</div>
       <div className="text-xs font-semibold text-slate-800 truncate">{c.relationship.clientName}</div>
-      <div className="text-xs text-slate-500 truncate">{c.instruction.beneficiaryCountry} · {fmt(c.instruction.amount)}</div>
-      <div className="mt-1.5 flex items-center gap-1.5">
-        <span className={clsx('text-xs px-1.5 py-0.5 rounded-full border font-semibold', sev.badge)}>{sev.label}</span>
-        <span className={clsx('text-xs px-1.5 py-0.5 rounded-full border font-semibold uppercase', STATUS_STYLES[c.status])}>{c.status}</span>
-      </div>
+      <div className="text-xs text-slate-500 truncate mt-0.5">{c.email.subject}</div>
+      <div className="text-xs text-slate-400 mt-1">{c.email.receivedAt}</div>
     </button>
   )
 }
 
-// ── Main Export ───────────────────────────────────────────────────────────────
+// ── Main Component ────────────────────────────────────────────────────────────
+
+const TABS: { label: string; cat: number; icon: React.ReactNode }[] = [
+  { label: 'Payment Instruction',      cat: 1, icon: <FileText className="w-3.5 h-3.5" /> },
+  { label: 'Counterparty History',     cat: 2, icon: <Globe className="w-3.5 h-3.5" /> },
+  { label: 'Email & Communications',   cat: 3, icon: <Mail className="w-3.5 h-3.5" /> },
+  { label: 'Identity & Access',        cat: 4, icon: <User className="w-3.5 h-3.5" /> },
+  { label: 'External Intelligence',    cat: 5, icon: <Shield className="w-3.5 h-3.5" /> },
+  { label: 'Outcome & Feedback',       cat: 6, icon: <Database className="w-3.5 h-3.5" /> },
+]
 
 export function DataExplorer() {
   const [selected, setSelected] = useState<BECCase>(BEC_CASES[0])
+  const [activeTab, setActiveTab] = useState(3)
   const [search, setSearch] = useState('')
-  const [severityFilter, setSeverityFilter] = useState<'all' | 'critical' | 'high' | 'medium'>('all')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'blocked' | 'flagged' | 'cleared'>('all')
-  const [scoreMin, setScoreMin] = useState(0)
 
-  const filtered = BEC_CASES
-    .filter(c => severityFilter === 'all' || c.severity === severityFilter)
-    .filter(c => statusFilter === 'all' || c.status === statusFilter)
-    .filter(c => c.anomalyScore >= scoreMin)
-    .filter(c =>
-      !search ||
-      c.relationship.clientName.toLowerCase().includes(search.toLowerCase()) ||
-      c.id.toLowerCase().includes(search.toLowerCase()) ||
-      c.instruction.beneficiaryName.toLowerCase().includes(search.toLowerCase()) ||
-      c.instruction.beneficiaryCountry.toLowerCase().includes(search.toLowerCase())
-    )
-    .sort((a, b) => b.anomalyScore - a.anomalyScore)
-
-  const blockedCount = filtered.filter(c => c.status === 'blocked').length
-  const flaggedCount = filtered.filter(c => c.status === 'flagged').length
+  const filtered = BEC_CASES.filter(c =>
+    !search ||
+    c.relationship.clientName.toLowerCase().includes(search.toLowerCase()) ||
+    c.id.toLowerCase().includes(search.toLowerCase()) ||
+    c.email.subject.toLowerCase().includes(search.toLowerCase())
+  )
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
 
       {/* Filter bar */}
       <div className="px-5 py-3 border-b border-slate-200 bg-white shrink-0">
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-1.5 mr-1">
-            <Mail className="w-4 h-4 text-blue-500" />
-            <h1 className="text-sm font-bold text-slate-900">BEC Case Explorer</h1>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
+            <Database className="w-4 h-4 text-blue-500" />
+            <h1 className="text-sm font-bold text-slate-900">Data Explorer</h1>
+            <span className="text-xs text-slate-400 ml-1">— extracted from payment events across 14 connected sources</span>
           </div>
           <input
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search client, case, beneficiary…"
-            className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-52"
+            placeholder="Search client, case ID, email subject…"
+            className="ml-auto px-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 w-64"
           />
-          <select value={severityFilter} onChange={e => setSeverityFilter(e.target.value as typeof severityFilter)}
-            className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="all">All Severities</option>
-            <option value="critical">Critical</option>
-            <option value="high">High</option>
-            <option value="medium">Medium</option>
-          </select>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value as typeof statusFilter)}
-            className="px-3 py-1.5 text-xs border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-            <option value="all">All Statuses</option>
-            <option value="blocked">Blocked</option>
-            <option value="flagged">Flagged</option>
-            <option value="cleared">Cleared</option>
-          </select>
-          <div className="flex items-center gap-1.5 text-xs text-slate-500">
-            <label>Score ≥</label>
-            <input type="number" value={scoreMin} onChange={e => setScoreMin(Number(e.target.value))} min={0} max={100} step={5}
-              className="w-14 px-2 py-1.5 border border-slate-200 rounded-lg text-center focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs" />
-          </div>
-          <div className="ml-auto flex gap-4 text-xs text-slate-500">
-            <span><strong className="text-slate-800">{filtered.length}</strong> cases</span>
-            <span><strong className="text-red-600">{blockedCount}</strong> blocked</span>
-            <span><strong className="text-amber-600">{flaggedCount}</strong> flagged</span>
-          </div>
         </div>
       </div>
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Case list sidebar */}
-        <div className="w-72 shrink-0 border-r border-slate-200 bg-white overflow-y-auto">
-          {filtered.length === 0 ? (
-            <div className="p-6 text-center text-xs text-slate-400">No cases match filters</div>
-          ) : (
-            filtered.map(c => (
-              <CaseListItem
-                key={c.id}
-                c={c}
-                isSelected={selected?.id === c.id}
-                onSelect={() => setSelected(c)}
-              />
-            ))
-          )}
+
+        {/* Case list */}
+        <div className="w-64 shrink-0 border-r border-slate-200 bg-white overflow-y-auto">
+          {filtered.map(c => (
+            <CaseListItem
+              key={c.id}
+              c={c}
+              isSelected={selected?.id === c.id}
+              onSelect={() => setSelected(c)}
+            />
+          ))}
         </div>
 
         {/* Detail panel */}
-        {selected
-          ? <CaseDetail c={selected} />
-          : (
-            <div className="flex-1 flex items-center justify-center text-slate-400">
-              <div className="text-center">
-                <Mail className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">Select a case to view the 360° context record</p>
+        <div className="flex-1 flex flex-col overflow-hidden">
+
+          {/* Selected email header */}
+          <div className="px-5 py-3 bg-white border-b border-slate-200 shrink-0">
+            <div className="flex items-center gap-3">
+              <Mail className="w-4 h-4 text-slate-400 shrink-0" />
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-slate-800 truncate">{selected.email.subject}</div>
+                <div className="text-xs text-slate-400">
+                  From <span className="font-mono">{selected.email.senderAddress}</span> · {selected.email.receivedAt} · {selected.relationship.clientName}
+                </div>
               </div>
             </div>
-          )
-        }
+          </div>
+
+          {/* Connected sources strip — highlights active tab's sources */}
+          <ConnectedSources activeTab={activeTab} />
+
+          {/* Tab navigation */}
+          <div className="flex items-center gap-0 border-b border-slate-200 bg-white shrink-0 overflow-x-auto">
+            {TABS.map(tab => (
+              <button
+                key={tab.cat}
+                onClick={() => setActiveTab(tab.cat)}
+                className={clsx(
+                  'flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors',
+                  activeTab === tab.cat
+                    ? 'border-blue-500 text-blue-700 bg-blue-50'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                )}
+              >
+                {tab.icon}
+                <span className="text-xs text-slate-400 mr-0.5">Cat {tab.cat}</span>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab content */}
+          <div className="flex-1 overflow-y-auto p-5">
+            {activeTab === 1 && <InstructionTab c={selected} />}
+            {activeTab === 2 && <RelationshipTab c={selected} />}
+            {activeTab === 3 && <EmailTab c={selected} />}
+            {activeTab === 4 && <IdentityTab c={selected} />}
+            {activeTab === 5 && <ExternalTab c={selected} />}
+            {activeTab === 6 && <OutcomeTab c={selected} />}
+          </div>
+        </div>
       </div>
     </div>
   )
