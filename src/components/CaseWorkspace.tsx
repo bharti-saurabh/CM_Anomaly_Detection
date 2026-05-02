@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAIAnalysis } from '../hooks/useAIAnalysis'
+import { DetectionEngine } from './DetectionEngine'
 import type { Signal, Severity, CaseStage, LLMSettings } from '../types'
 
 const SEVERITY_STYLES: Record<Severity, { badge: string; border: string }> = {
@@ -59,7 +60,7 @@ interface Props {
 export function CaseWorkspace({ signal, settings, effectiveModel, isConfigured, onOpenSettings }: Props) {
   const { text: aiText, isStreaming, error: aiError, analyze, clear } = useAIAnalysis()
   const [stage, setStage] = useState<CaseStage>('investigating')
-  const [activeTab, setActiveTab] = useState<'analysis' | 'explainability'>('analysis')
+  const [activeTab, setActiveTab] = useState<'detection' | 'analysis' | 'explainability'>('detection')
   const [showBacktest, setShowBacktest] = useState(false)
   const [isRunningBacktest, setIsRunningBacktest] = useState(false)
   const [codeCopied, setCodeCopied] = useState(false)
@@ -68,7 +69,7 @@ export function CaseWorkspace({ signal, settings, effectiveModel, isConfigured, 
   useEffect(() => {
     if (!signal) return
     setStage(signal.caseData.stage)
-    setActiveTab('analysis')
+    setActiveTab('detection')
     setShowBacktest(false)
     setIsRunningBacktest(false)
     setApproved(false)
@@ -173,21 +174,32 @@ export function CaseWorkspace({ signal, settings, effectiveModel, isConfigured, 
 
         {/* Tab Bar */}
         <div className="flex gap-1 bg-white rounded-xl border border-slate-200 p-1">
-          {(['analysis', 'explainability'] as const).map(tab => (
+          {(
+            [
+              { id: 'detection', label: 'Detection & Scoring' },
+              { id: 'analysis', label: 'Forensic Analysis' },
+              { id: 'explainability', label: 'Explainability (XAI)' },
+            ] as const
+          ).map(tab => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
               className={clsx(
-                'flex-1 py-2 text-sm font-semibold rounded-lg capitalize transition-all',
-                activeTab === tab
+                'flex-1 py-2 text-sm font-semibold rounded-lg transition-all',
+                activeTab === tab.id
                   ? 'bg-slate-900 text-white'
                   : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
               )}
             >
-              {tab === 'analysis' ? 'Forensic Analysis' : 'Explainability (XAI)'}
+              {tab.label}
             </button>
           ))}
         </div>
+
+        {/* ── Detection Tab ────────────────────────────────────────────────── */}
+        {activeTab === 'detection' && (
+          <DetectionEngine signal={signal} />
+        )}
 
         {/* ── Analysis Tab ─────────────────────────────────────────────────── */}
         {activeTab === 'analysis' && (

@@ -23,7 +23,6 @@ const SOURCES = [
   { id: 'ip',       name: 'IP Reputation',          color: 'lime',   cats: [4, 5] },
   { id: 'fincen',   name: 'FinCEN 314(b)',          color: 'green',  cats: [5] },
   { id: 'sanction', name: 'Sanctions Screening',    color: 'emerald',cats: [5] },
-  { id: 'case',     name: 'Case Management',        color: 'teal',   cats: [6] },
 ] as const
 
 type SourceId = typeof SOURCES[number]['id']
@@ -42,7 +41,6 @@ const SOURCE_CHIP: Record<string, string> = {
   lime:    'bg-lime-50 text-lime-700 border-lime-200',
   green:   'bg-green-50 text-green-700 border-green-200',
   emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-  teal:    'bg-teal-50 text-teal-700 border-teal-200',
 }
 
 function SourceTag({ id }: { id: SourceId }) {
@@ -409,37 +407,6 @@ function ExternalTab({ c }: { c: BECCase }) {
   )
 }
 
-// ── Tab 6 — Outcome Data ──────────────────────────────────────────────────────
-
-function OutcomeTab({ c }: { c: BECCase }) {
-  const o = c.outcome
-  return (
-    <div className="space-y-4">
-      <CardShell title="Case Disposition" icon={<FileText className="w-3.5 h-3.5" />} sources={['case']}>
-        <Row label="Disposition" value={o.disposition} src="case" />
-        <Row label="Disposition date" value={o.dispositionDate ?? 'Pending'} src="case" />
-        <Row label="Resolution days" value={o.resolutionDays !== null ? o.resolutionDays.toString() : 'Ongoing'} src="case" />
-        <Row label="Investigator notes" value={
-          <div className="text-xs text-slate-700 italic text-right max-w-xs">{o.investigatorNotes}</div>
-        } src="case" />
-      </CardShell>
-
-      <CardShell title="Regulatory Reporting" icon={<Shield className="w-3.5 h-3.5" />} sources={['case']}>
-        <Row label="SAR filed" value={o.sarFiled ? 'Yes' : 'No'} src="case" />
-        <Row label="SAR reference" value={o.sarReference ?? 'N/A'} src="case" mono />
-        <Row label="RAT request filed" value={o.ratRequestFiled ? 'Yes' : 'No'} src="case" />
-        <Row label="RAT outcome" value={o.ratOutcome ?? 'N/A'} src="case" />
-        <Row label="Funds recovered" value={o.fundsRecovered ? `Yes — $${o.recoveredAmount?.toLocaleString()}` : 'No'} src="case" />
-      </CardShell>
-
-      <CardShell title="Model Feedback Loop" icon={<Database className="w-3.5 h-3.5" />} sources={['case']}>
-        <Row label="Model feedback label" value={o.modelFeedbackLabel} src="case" mono />
-        <Row label="Added to training data" value={o.addedToTrainingData ? 'Yes' : 'Pending review'} src="case" />
-      </CardShell>
-    </div>
-  )
-}
-
 // ── Connected Sources Strip ───────────────────────────────────────────────────
 
 function ConnectedSources({ activeTab }: { activeTab: number }) {
@@ -494,7 +461,6 @@ const TABS: { label: string; cat: number; icon: React.ReactNode }[] = [
   { label: 'Counterparty History',     cat: 3, icon: <Globe className="w-3.5 h-3.5" /> },
   { label: 'Identity & Access',        cat: 4, icon: <User className="w-3.5 h-3.5" /> },
   { label: 'External Intelligence',    cat: 5, icon: <Shield className="w-3.5 h-3.5" /> },
-  { label: 'Outcome & Feedback',       cat: 6, icon: <Database className="w-3.5 h-3.5" /> },
 ]
 
 export function DataExplorer() {
@@ -590,7 +556,6 @@ export function DataExplorer() {
             {activeTab === 3 && <RelationshipTab c={selected} />}
             {activeTab === 4 && <IdentityTab c={selected} />}
             {activeTab === 5 && <ExternalTab c={selected} />}
-            {activeTab === 6 && <OutcomeTab c={selected} />}
           </div>
         </div>
       </div>
