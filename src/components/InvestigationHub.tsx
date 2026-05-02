@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import {
-  Mail, CreditCard, Fingerprint, Network, ShieldCheck,
-  Cpu, Activity,
+  Mail, CreditCard, Fingerprint, Network, ShieldCheck, Cpu,
+  AlertTriangle, Globe, MapPin, Monitor, UserX, Zap, Activity,
+  Lock, Clock, Hash, ArrowUpRight,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { BEC_CASES } from '../data/becCases'
@@ -10,317 +11,274 @@ import type { BECCase } from '../types'
 // ── Agent registry ────────────────────────────────────────────────────────────
 
 const AGENTS = [
-  {
-    id: 'email'      as const,
-    name: 'Email Screener',
-    model: 'NLP / Transformer',
-    icon: Mail,
-    accent: { border: 'border-sky-500/50', bg: 'bg-sky-500/8', dot: 'bg-sky-400', text: 'text-sky-300', bar: 'bg-sky-500', label: 'text-sky-400' },
-    outputKeys: ['urgency_score', 'domain_risk', 'lang_anomaly'] as const,
-  },
-  {
-    id: 'payment'    as const,
-    name: 'Payment Anomaly',
-    model: 'XGBoost Ensemble',
-    icon: CreditCard,
-    accent: { border: 'border-violet-500/50', bg: 'bg-violet-500/8', dot: 'bg-violet-400', text: 'text-violet-300', bar: 'bg-violet-500', label: 'text-violet-400' },
-    outputKeys: ['anomaly_score', 'top_factor', 'threshold_flag'] as const,
-  },
-  {
-    id: 'identity'   as const,
-    name: 'Identity & Session',
-    model: 'Isolation Forest',
-    icon: Fingerprint,
-    accent: { border: 'border-amber-500/50', bg: 'bg-amber-500/8', dot: 'bg-amber-400', text: 'text-amber-300', bar: 'bg-amber-500', label: 'text-amber-400' },
-    outputKeys: ['identity_risk', 'device_flag', 'location_flag'] as const,
-  },
-  {
-    id: 'graph'      as const,
-    name: 'Relationship Graph',
-    model: 'Graph Neural Net',
-    icon: Network,
-    accent: { border: 'border-emerald-500/50', bg: 'bg-emerald-500/8', dot: 'bg-emerald-400', text: 'text-emerald-300', bar: 'bg-emerald-500', label: 'text-emerald-400' },
-    outputKeys: ['network_risk', 'entity_score'] as const,
-  },
-  {
-    id: 'intel'      as const,
-    name: 'Counterparty Intel',
-    model: 'Rules Engine + BERT',
-    icon: ShieldCheck,
-    accent: { border: 'border-rose-500/50', bg: 'bg-rose-500/8', dot: 'bg-rose-400', text: 'text-rose-300', bar: 'bg-rose-500', label: 'text-rose-400' },
-    outputKeys: ['compliance_risk', 'typology', 'reg_flags'] as const,
-  },
+  { id: 'email'     as const, name: 'Email Screener',    model: 'NLP / Transformer', icon: Mail,       accent: { dot: 'bg-sky-400',     text: 'text-sky-300',     border: 'border-sky-500/40',     bar: 'bg-sky-500',     line: 'text-sky-200'  } },
+  { id: 'payment'   as const, name: 'Payment Anomaly',   model: 'XGBoost Ensemble',  icon: CreditCard,  accent: { dot: 'bg-violet-400',  text: 'text-violet-300',  border: 'border-violet-500/40',  bar: 'bg-violet-500',  line: 'text-violet-200' } },
+  { id: 'identity'  as const, name: 'Identity & Session', model: 'Isolation Forest', icon: Fingerprint, accent: { dot: 'bg-amber-400',   text: 'text-amber-300',   border: 'border-amber-500/40',   bar: 'bg-amber-500',   line: 'text-amber-200' } },
+  { id: 'graph'     as const, name: 'Relationship Graph', model: 'Graph Neural Net', icon: Network,     accent: { dot: 'bg-emerald-400', text: 'text-emerald-300', border: 'border-emerald-500/40', bar: 'bg-emerald-500', line: 'text-emerald-200' } },
+  { id: 'intel'     as const, name: 'Counterparty Intel', model: 'Rules + BERT',     icon: ShieldCheck, accent: { dot: 'bg-rose-400',    text: 'text-rose-300',    border: 'border-rose-500/40',    bar: 'bg-rose-500',    line: 'text-rose-200'  } },
 ]
-
 type AgentId = typeof AGENTS[number]['id']
 
-type AgentResult = {
-  score: number
-  lines: string[]
-  outputs: Record<string, string>
+// ── Risk entity colours (dark mode, bold) ─────────────────────────────────────
+
+const ENTITY_RISK: Record<string, string> = {
+  deadline:    'bg-red-900/70 text-red-200 border border-red-600/60 ring-1 ring-red-500/40',
+  amount:      'bg-orange-900/70 text-orange-200 border border-orange-600/60 ring-1 ring-orange-500/40',
+  account:     'bg-violet-900/70 text-violet-200 border border-violet-600/60 ring-1 ring-violet-500/40',
+  institution: 'bg-blue-900/60 text-blue-200 border border-blue-600/50',
+  person:      'bg-slate-700/60 text-slate-200 border border-slate-500/50',
+  location:    'bg-teal-900/60 text-teal-200 border border-teal-600/50',
+}
+const ENTITY_DIM: Record<string, string> = {
+  deadline:    'text-slate-500',
+  amount:      'text-slate-500',
+  account:     'text-slate-500',
+  institution: 'text-slate-500',
+  person:      'text-slate-500',
+  location:    'text-slate-500',
 }
 
-// ── Per-agent data computation from BECCase ───────────────────────────────────
+// ── Which entity types each agent activates (at which log-line index) ─────────
 
-function emailAgent(c: BECCase): AgentResult {
-  const { email: e, nlpAnalysis: n, externalIntel: ei } = c
+const ENTITY_ACTIVATIONS: Partial<Record<AgentId, Partial<Record<number, string[]>>>> = {
+  email:   { 1: ['deadline'], 2: ['location'], 4: ['person'] },
+  payment: { 0: ['amount', 'account'], 2: ['institution'] },
+  graph:   { 1: ['institution'] },
+}
 
-  const lines = [
-    `Loading ${c.relationship.clientName} baseline — ${n.histStyleBaselineSamples} historical emails scanned`,
-    `Urgency classifier: ${n.urgencyPhrases.length} urgency · ${n.secrecyPhrases.length} secrecy · ${n.overridePhrases.length} override phrases detected`,
-    ei.emailDomainIsLookalike
-      ? `Domain lookalike: ${e.senderAddress.split('@')[1]} ↔ ${ei.lookalikeDomain ?? 'known domain'} — typosquat confirmed`
-      : `Domain: ${e.senderAddress.split('@')[1]} — no lookalike pattern found (age: ${e.senderDomainAgeDays}d)`,
-    `Style consistency: ${Math.round(n.writingStyleConsistency * 100)}% vs baseline — ${n.writingStyleConsistency < 0.55 ? 'anomalous authorship signal' : 'within normal range'}`,
-    `Auth: DKIM ${e.dkim.toUpperCase()} · SPF ${e.spf.toUpperCase()} · DMARC ${e.dmarc.toUpperCase()} · domain age ${e.senderDomainAgeDays}d`,
+// ── Signal card type & builder ────────────────────────────────────────────────
+
+interface SCard {
+  id: string
+  agentId: AgentId
+  atLine: number
+  Icon: React.FC<{ className?: string }>
+  label: string
+  value: string
+  detail: string
+  sev: 'critical' | 'high' | 'medium'
+}
+
+const SEV_CARD: Record<SCard['sev'], { border: string; bg: string; icon: string; dot: string; val: string }> = {
+  critical: { border: 'border-red-600/50',    bg: 'bg-red-950/60',    icon: 'text-red-400',    dot: 'bg-red-500',    val: 'text-red-200'    },
+  high:     { border: 'border-orange-600/50', bg: 'bg-orange-950/60', icon: 'text-orange-400', dot: 'bg-orange-500', val: 'text-orange-200' },
+  medium:   { border: 'border-amber-600/50',  bg: 'bg-amber-950/60',  icon: 'text-amber-400',  dot: 'bg-amber-500',  val: 'text-amber-200'  },
+}
+
+function buildSignalCards(c: BECCase): SCard[] {
+  const { email: e, instruction: i, identity: id, externalIntel: ei, relationship: r, nlpAnalysis: n } = c
+  const cards: SCard[] = []
+
+  if (ei.emailDomainIsLookalike)
+    cards.push({ id:'domain_lookalike', agentId:'email', atLine:2, Icon:AlertTriangle, label:'Domain Lookalike', value:`${e.senderAddress.split('@')[1]}`, detail:`spoofs ${ei.lookalikeDomain ?? 'known domain'} · ${e.senderDomainAgeDays}d old`, sev:'critical' })
+
+  if (n.urgencyPhrases.length > 0)
+    cards.push({ id:'urgency_phrases', agentId:'email', atLine:1, Icon:Zap, label:'Urgency Language', value:`${n.urgencyPhrases.length} phrases detected`, detail:`"${n.urgencyPhrases[0]?.slice(0,38)}"`, sev:'high' })
+
+  if (n.overridePhrases.length > 0)
+    cards.push({ id:'override_phrases', agentId:'email', atLine:1, Icon:Lock, label:'Override Request', value:`${n.overridePhrases.length} override phrases`, detail:`"${n.overridePhrases[0]?.slice(0,38)}"`, sev:'critical' })
+
+  if (e.dkim === 'fail' || e.spf === 'fail')
+    cards.push({ id:'auth_fail', agentId:'email', atLine:4, Icon:AlertTriangle, label:'Auth Failure', value:`DKIM ${e.dkim.toUpperCase()} · SPF ${e.spf.toUpperCase()} · DMARC ${e.dmarc.toUpperCase()}`, detail:`Sender domain not authenticated`, sev:'high' })
+
+  if (i.amountDeviationFactor > 2)
+    cards.push({ id:'amount_anomaly', agentId:'payment', atLine:1, Icon:ArrowUpRight, label:'Amount Anomaly', value:`${i.amountDeviationFactor.toFixed(1)}× client average`, detail:`${i.currency} ${i.amount.toLocaleString()} vs avg ${i.historicalAvg.toLocaleString()}`, sev: i.amountDeviationFactor > 5 ? 'critical' : 'high' })
+
+  if (i.beneficiaryIsNew)
+    cards.push({ id:'new_beneficiary', agentId:'payment', atLine:2, Icon:UserX, label:'New Beneficiary', value:i.beneficiaryName.slice(0,28), detail:`${i.beneficiaryCountry} · first occurrence in registry`, sev:'high' })
+
+  if (!i.dualAuthFollowed || i.selfApproved)
+    cards.push({ id:'control_bypass', agentId:'payment', atLine:3, Icon:Lock, label:`${i.selfApproved ? 'Self-Approval' : 'Dual-Auth Bypassed'}`, value:`${i.approvalWorkflowMinutes}min approval`, detail:i.selfApproved ? `${i.submittedBy} approved own instruction` : 'Maker-checker control not followed', sev:'critical' })
+
+  if (id.deviceIsNew)
+    cards.push({ id:'new_device', agentId:'identity', atLine:1, Icon:Monitor, label:'Unknown Device', value:'New device — not in registry', detail:id.deviceId.slice(0,30), sev:'high' })
+
+  if (id.loginLocation !== id.expectedLocation)
+    cards.push({ id:'location_mismatch', agentId:'identity', atLine:2, Icon:MapPin, label:'Location Mismatch', value:id.loginLocation, detail:`expected: ${id.expectedLocation}`, sev:'high' })
+
+  if (id.vpnDetected)
+    cards.push({ id:'vpn', agentId:'identity', atLine:3, Icon:Globe, label:'VPN Detected', value:'Anonymous routing active', detail:`Session origin masked`, sev:'medium' })
+
+  if (ei.ipFlagged)
+    cards.push({ id:'ip_flagged', agentId:'graph', atLine:4, Icon:AlertTriangle, label:'Flagged IP', value:e.originatingIP, detail:(ei.ipFraudSource ?? '').slice(0,40), sev:'critical' })
+
+  if (!r.typicalCountries.includes(i.beneficiaryCountry))
+    cards.push({ id:'new_jurisdiction', agentId:'graph', atLine:3, Icon:Globe, label:'New Jurisdiction', value:i.beneficiaryCountry, detail:`outside baseline: ${r.typicalCountries.join(', ')}`, sev:'high' })
+
+  if (i.submittedOutsideHours)
+    cards.push({ id:'off_hours', agentId:'payment', atLine:3, Icon:Clock, label:'Off-Hours Submission', value:i.submittedAt, detail:'Outside normal business hours', sev:'medium' })
+
+  if (ei.swiftControlsFlag)
+    cards.push({ id:'swift_flag', agentId:'intel', atLine:2, Icon:Activity, label:'SWIFT Controls Alert', value:'Payment flagged for review', detail:ei.beneficiaryBankCountryRisk.slice(0,40), sev:'high' })
+
+  if (ei.fincenMatch || ei.beneficiaryFraudFlag)
+    cards.push({ id:'fraud_network', agentId:'intel', atLine:1, Icon:Hash, label:'Fraud Network Match', value:'Beneficiary flagged', detail:(ei.beneficiaryFraudSource ?? 'FinCEN 314(b) match').slice(0,40), sev:'critical' })
+
+  return cards.slice(0, 10)
+}
+
+// ── Agent score computation ───────────────────────────────────────────────────
+
+function computeAgentData(c: BECCase): Record<AgentId, { score: number; lines: string[] }> {
+  const { email: e, nlpAnalysis: n, externalIntel: ei, instruction: i, identity: id, relationship: r } = c
+
+  const emailLines = [
+    `Loading ${c.relationship.clientName} corpus — ${n.histStyleBaselineSamples} baseline emails`,
+    `Urgency: ${n.urgencyPhrases.length} phrases · Secrecy: ${n.secrecyPhrases.length} · Override: ${n.overridePhrases.length}`,
+    ei.emailDomainIsLookalike ? `Lookalike domain: ${e.senderAddress.split('@')[1]} ↔ ${ei.lookalikeDomain}` : `Domain ${e.senderAddress.split('@')[1]} — no lookalike`,
+    `Style match: ${Math.round(n.writingStyleConsistency * 100)}% — ${n.writingStyleConsistency < 0.55 ? 'anomalous authorship' : 'within range'}`,
+    `DKIM ${e.dkim.toUpperCase()} · SPF ${e.spf.toUpperCase()} · DMARC ${e.dmarc.toUpperCase()} · domain ${e.senderDomainAgeDays}d`,
   ]
+  let emailScore = 0
+  emailScore += Math.min(n.urgencyPhrases.length * 0.11, 0.33)
+  emailScore += Math.min(n.overridePhrases.length * 0.14, 0.28)
+  emailScore += (1 - n.writingStyleConsistency) * 0.21
+  emailScore += ei.emailDomainIsLookalike ? 0.26 : 0
+  emailScore += e.senderDomainAgeDays < 90 ? 0.14 : e.senderDomainAgeDays < 180 ? 0.07 : 0
+  emailScore += e.dkim === 'fail' ? 0.06 : 0
 
-  let score = 0
-  score += Math.min(n.urgencyPhrases.length * 0.11, 0.33)
-  score += Math.min(n.overridePhrases.length * 0.14, 0.28)
-  score += (1 - n.writingStyleConsistency) * 0.21
-  score += ei.emailDomainIsLookalike ? 0.26 : 0
-  score += e.senderDomainAgeDays < 90 ? 0.14 : e.senderDomainAgeDays < 180 ? 0.07 : 0
-  score += e.dkim === 'fail' ? 0.06 : 0
-  score = Math.min(1, score)
-
-  return {
-    score,
-    lines,
-    outputs: {
-      urgency_score: score.toFixed(2),
-      domain_risk: ei.emailDomainIsLookalike ? 'HIGH' : e.senderDomainAgeDays < 180 ? 'MEDIUM' : 'LOW',
-      lang_anomaly: n.writingStyleConsistency < 0.55 || n.urgencyPhrases.length > 1 ? 'FLAGGED' : 'clear',
-    },
-  }
-}
-
-function paymentAgent(c: BECCase): AgentResult {
-  const i = c.instruction
-
-  const topFactor = i.amountDeviationFactor > 4 ? `amount_deviation_${i.amountDeviationFactor.toFixed(1)}×`
-    : i.beneficiaryIsNew ? 'new_beneficiary'
-    : i.submittedOutsideHours ? 'off_hours_submission'
-    : 'round_number_pattern'
-
-  const lines = [
-    `Instruction: ${i.currency} ${i.amount.toLocaleString()} → ${i.beneficiaryName} (${i.beneficiaryCountry})`,
-    `Amount: ${i.amountDeviationFactor.toFixed(1)}× client avg ${i.currency} ${i.historicalAvg.toLocaleString()} — ${i.amountDeviationFactor > 5 ? 'extreme outlier' : i.amountDeviationFactor > 2 ? 'elevated' : 'within range'}`,
-    `Beneficiary: ${i.beneficiaryIsNew ? 'FIRST-OCCURRENCE — absent from counterparty registry' : 'known entity — found in registry'}`,
-    `${i.submittedOutsideHours ? 'OFF-HOURS submission' : 'Standard hours'} · Approval: ${i.approvalWorkflowMinutes}min · Dual-auth: ${i.dualAuthFollowed ? 'followed' : 'BYPASSED'}`,
-    `Round-number: ${i.roundNumberFlag ? 'FLAGGED' : 'no'} · Below-threshold structuring: ${i.belowThresholdFlag ? 'FLAGGED' : 'no'}`,
+  const paymentLines = [
+    `Instruction: ${i.currency} ${i.amount.toLocaleString()} → ${i.beneficiaryName}`,
+    `Amount: ${i.amountDeviationFactor.toFixed(1)}× avg — ${i.amountDeviationFactor > 5 ? 'extreme outlier' : i.amountDeviationFactor > 2 ? 'elevated' : 'normal'}`,
+    `Beneficiary: ${i.beneficiaryIsNew ? 'FIRST-OCCURRENCE · absent from registry' : 'known counterparty'}`,
+    `${i.submittedOutsideHours ? 'OFF-HOURS' : 'Standard hours'} · ${i.approvalWorkflowMinutes}min approval · dual-auth: ${i.dualAuthFollowed ? 'yes' : 'BYPASSED'}`,
+    `Round-number: ${i.roundNumberFlag ? 'YES' : 'no'} · Below-threshold: ${i.belowThresholdFlag ? 'YES' : 'no'}`,
   ]
+  let paymentScore = 0
+  paymentScore += Math.min((i.amountDeviationFactor - 1) / 11, 1) * 0.32
+  paymentScore += i.beneficiaryIsNew ? 0.28 : 0
+  paymentScore += i.submittedOutsideHours ? 0.14 : 0
+  paymentScore += i.roundNumberFlag ? 0.13 : 0
+  paymentScore += i.belowThresholdFlag ? 0.13 : 0
 
-  let score = 0
-  score += Math.min((i.amountDeviationFactor - 1) / 11, 1) * 0.32
-  score += i.beneficiaryIsNew ? 0.28 : 0
-  score += i.submittedOutsideHours ? 0.14 : 0
-  score += i.roundNumberFlag ? 0.13 : 0
-  score += i.belowThresholdFlag ? 0.13 : 0
-  score = Math.min(1, score)
-
-  return {
-    score,
-    lines,
-    outputs: {
-      anomaly_score: score.toFixed(2),
-      top_factor: topFactor,
-      threshold_flag: i.belowThresholdFlag ? 'DETECTED' : 'none',
-    },
-  }
-}
-
-function identityAgent(c: BECCase): AgentResult {
-  const { identity: id, instruction: i } = c
   const locMismatch = id.loginLocation !== id.expectedLocation
-
-  const lines = [
-    `User ${id.submittingUser} (${id.userId}) authenticated at ${id.loginTime}`,
-    `Device ${id.deviceId.slice(0, 16)}…: ${id.deviceIsNew ? 'NEW — not in registered device inventory' : 'recognised device'}`,
-    `Location: ${id.loginLocation} · Expected: ${id.expectedLocation} — ${locMismatch ? 'MISMATCH DETECTED' : 'location match'}`,
-    `MFA: ${id.mfaUsed ? id.mfaMethod : 'NOT USED'} · VPN: ${id.vpnDetected ? 'DETECTED' : 'not detected'} · Failed logins 24h: ${id.priorFailedLogins}`,
-    `Approval: ${i.approvalWorkflowMinutes}min workflow${i.selfApproved ? ' — SELF-APPROVED (maker-checker bypassed)' : ''}`,
+  const identityLines = [
+    `User ${id.submittingUser} · ${id.loginTime}`,
+    `Device: ${id.deviceIsNew ? 'NEW — not in registry' : 'recognised'} · ${id.deviceId.slice(0, 18)}`,
+    `Location: ${id.loginLocation} — expected ${id.expectedLocation} · ${locMismatch ? 'MISMATCH' : 'match'}`,
+    `MFA: ${id.mfaUsed ? id.mfaMethod : 'NOT USED'} · VPN: ${id.vpnDetected ? 'DETECTED' : 'none'} · failed logins: ${id.priorFailedLogins}`,
+    `Approval: ${i.approvalWorkflowMinutes}min${i.selfApproved ? ' · SELF-APPROVED' : ''}`,
   ]
+  let identityScore = 0
+  identityScore += id.deviceIsNew ? 0.30 : 0
+  identityScore += locMismatch ? 0.23 : 0
+  identityScore += i.selfApproved ? 0.22 : 0
+  identityScore += i.approvalWorkflowMinutes < 5 ? 0.18 : i.approvalWorkflowMinutes < 15 ? 0.09 : 0
+  identityScore += id.vpnDetected ? 0.07 : 0
 
-  let score = 0
-  score += id.deviceIsNew ? 0.30 : 0
-  score += locMismatch ? 0.23 : 0
-  score += i.selfApproved ? 0.22 : 0
-  score += i.approvalWorkflowMinutes < 5 ? 0.18 : i.approvalWorkflowMinutes < 15 ? 0.09 : 0
-  score += id.vpnDetected ? 0.07 : 0
-  score = Math.min(1, score)
-
-  return {
-    score,
-    lines,
-    outputs: {
-      identity_risk: score.toFixed(2),
-      device_flag: id.deviceIsNew ? 'NEW DEVICE' : 'recognised',
-      location_flag: locMismatch ? 'MISMATCH' : 'match',
-    },
-  }
-}
-
-function graphAgent(c: BECCase): AgentResult {
-  const { relationship: r, externalIntel: ei, instruction: i, email: e } = c
   const countryInBaseline = r.typicalCountries.includes(i.beneficiaryCountry)
-
-  const lines = [
-    `Entity graph: ${r.clientName} — ${r.totalPaymentsLast12M} payments · ${r.counterpartyRegistryCount} known counterparties`,
-    `Beneficiary node: ${i.beneficiaryName} — ${i.beneficiaryIsNew ? 'ABSENT from graph · isolated new node' : 'present · existing relationship'}`,
-    `Fraud network: ${ei.beneficiaryFraudFlag ? `MATCH — ${ei.beneficiaryFraudSource}` : 'beneficiary not in fraud network'}`,
+  const graphLines = [
+    `Graph: ${r.clientName} · ${r.totalPaymentsLast12M} payments · ${r.counterpartyRegistryCount} counterparties`,
+    `${i.beneficiaryName}: ${i.beneficiaryIsNew ? 'ABSENT from graph — new isolated node' : 'found in counterparty graph'}`,
+    `Fraud network: ${ei.beneficiaryFraudFlag ? `FLAGGED — ${ei.beneficiaryFraudSource?.slice(0,35)}` : 'no beneficiary fraud match'}`,
     `Geography: ${i.beneficiaryCountry} ${countryInBaseline ? 'within' : 'OUTSIDE'} baseline (${r.typicalCountries.join(', ')})`,
-    `IP ${e.originatingIP}: ${ei.ipFlagged ? `FLAGGED — ${(ei.ipFraudSource ?? '').slice(0, 50)}` : 'no fraud signal'} · ${ei.ipAsn.slice(0, 30)}`,
+    `IP ${e.originatingIP}: ${ei.ipFlagged ? `FLAGGED · ${ei.ipAsn.slice(0, 28)}` : 'no fraud signal'}`,
   ]
-
-  let score = 0
-  score += ei.beneficiaryFraudFlag ? 0.38 : 0
-  score += ei.emailDomainIsLookalike ? 0.22 : 0
-  score += !countryInBaseline ? 0.22 : 0
-  score += ei.ipFlagged ? 0.18 : 0
-  score = Math.min(1, score)
-
-  const networkRisk = ei.beneficiaryFraudFlag ? 'FLAGGED' : ei.ipFlagged ? 'ELEVATED' : !countryInBaseline ? 'ELEVATED' : 'CLEAR'
-
-  return {
-    score,
-    lines,
-    outputs: {
-      network_risk: networkRisk,
-      entity_score: score.toFixed(2),
-    },
-  }
-}
-
-function intelAgent(c: BECCase): AgentResult {
-  const { externalIntel: ei, instruction: i, relationship: r } = c
+  let graphScore = 0
+  graphScore += ei.beneficiaryFraudFlag ? 0.38 : 0
+  graphScore += ei.emailDomainIsLookalike ? 0.22 : 0
+  graphScore += !countryInBaseline ? 0.22 : 0
+  graphScore += ei.ipFlagged ? 0.18 : 0
 
   const regFlags: string[] = []
-  if (ei.swiftControlsFlag) regFlags.push('SWIFT controls')
+  if (ei.swiftControlsFlag) regFlags.push('SWIFT')
   if (ei.ofacMatch) regFlags.push('OFAC')
-  if (ei.fincenMatch) regFlags.push('FinCEN 314(b)')
-  if (!r.typicalCountries.includes(i.beneficiaryCountry)) regFlags.push('new jurisdiction')
-
-  const typology = ei.emailDomainIsLookalike && i.beneficiaryIsNew ? 'BEC-3A'
-    : !i.dualAuthFollowed || i.selfApproved ? 'BEC-5A'
-    : i.beneficiaryIsNew && !r.typicalCountries.includes(i.beneficiaryCountry) ? 'BEC-2B'
-    : 'BEC-1C'
-
-  const lines = [
-    `OFAC SDN: "${i.beneficiaryName}" — ${ei.ofacMatch ? 'MATCH FOUND' : 'no match'} · bank "${i.beneficiaryBank}" — ${ei.ofacMatch ? 'FLAGGED' : 'clear'}`,
-    `FinCEN 314(b): ${ei.fincenMatch ? `MATCH — ${ei.beneficiaryFraudSource ?? 'intel match'}` : 'no match on entity or account'}`,
-    `SWIFT GPI: ${ei.swiftControlsFlag ? 'PAYMENT CONTROLS ALERT — enhanced monitoring required' : 'no controls alert'} · country risk: ${ei.beneficiaryBankCountryRisk.split('—')[0].trim()}`,
-    `AML typology: ${typology} — ${typology === 'BEC-3A' ? 'lookalike domain + new beneficiary' : typology === 'BEC-5A' ? 'internal control override' : typology === 'BEC-2B' ? 'new offshore entity' : 'social engineering pattern'}`,
-    `Sanctions result: ${ei.sanctionsScreeningResult.slice(0, 60)} · ${ei.ipGeolocation.slice(0, 30)}`,
+  if (ei.fincenMatch) regFlags.push('FinCEN')
+  const intelLines = [
+    `OFAC: ${ei.ofacMatch ? 'MATCH FOUND' : 'clear'} · FinCEN 314(b): ${ei.fincenMatch ? 'MATCH' : 'no match'}`,
+    `SWIFT GPI: ${ei.swiftControlsFlag ? 'CONTROLS ALERT' : 'no alert'} · country risk: ${ei.beneficiaryBankCountryRisk.split('—')[0].trim()}`,
+    `Beneficiary fraud flag: ${ei.beneficiaryFraudFlag ? `YES — ${(ei.beneficiaryFraudSource ?? '').slice(0,30)}` : 'none'}`,
+    `AML typology: ${ei.emailDomainIsLookalike && i.beneficiaryIsNew ? 'BEC-3A' : !i.dualAuthFollowed ? 'BEC-5A' : !countryInBaseline ? 'BEC-2B' : 'BEC-1C'}`,
+    `Sanctions: ${ei.sanctionsScreeningResult.slice(0, 45)} ${regFlags.length ? `· flags: ${regFlags.join(', ')}` : ''}`,
   ]
-
-  let score = 0
-  score += ei.ofacMatch ? 0.40 : 0
-  score += ei.fincenMatch ? 0.28 : 0
-  score += ei.swiftControlsFlag ? 0.22 : 0
-  if (score < 0.12 && !r.typicalCountries.includes(i.beneficiaryCountry)) score += 0.20
-  score = Math.min(1, score)
+  let intelScore = 0
+  intelScore += ei.ofacMatch ? 0.40 : 0
+  intelScore += ei.fincenMatch ? 0.28 : 0
+  intelScore += ei.swiftControlsFlag ? 0.22 : 0
+  if (intelScore < 0.12 && !countryInBaseline) intelScore += 0.20
 
   return {
-    score,
-    lines,
-    outputs: {
-      compliance_risk: score.toFixed(2),
-      typology,
-      reg_flags: regFlags.length > 0 ? regFlags.join(' · ') : 'none',
-    },
+    email:    { score: Math.min(1, emailScore),    lines: emailLines    },
+    payment:  { score: Math.min(1, paymentScore),  lines: paymentLines  },
+    identity: { score: Math.min(1, identityScore), lines: identityLines },
+    graph:    { score: Math.min(1, graphScore),     lines: graphLines    },
+    intel:    { score: Math.min(1, intelScore),     lines: intelLines    },
   }
 }
 
-function computeAll(c: BECCase): Record<AgentId, AgentResult> {
-  return { email: emailAgent(c), payment: paymentAgent(c), identity: identityAgent(c), graph: graphAgent(c), intel: intelAgent(c) }
-}
+// ── Email panel (middle top) ──────────────────────────────────────────────────
 
-// ── Subcomponents ─────────────────────────────────────────────────────────────
-
-function Terminal({ lines, active }: { lines: string[]; active: boolean }) {
-  return (
-    <div className="font-mono text-xs space-y-1.5 min-h-[4.5rem]">
-      {lines.map((line, i) => (
-        <div key={i} className="flex items-start gap-2">
-          <span className="text-emerald-600 shrink-0 select-none">❯</span>
-          <span className="text-slate-300 leading-relaxed">{line}</span>
-        </div>
-      ))}
-      {active && (
-        <div className="flex items-center gap-2">
-          <span className="text-emerald-600 select-none">❯</span>
-          <span className="w-2 h-3.5 bg-emerald-500 rounded-sm animate-pulse" />
-        </div>
-      )}
-    </div>
-  )
-}
-
-type AgentDef = typeof AGENTS[number]
-
-function AgentCard({ def, lines, score, running }: {
-  def: AgentDef
-  lines: string[]
-  score: number | null
-  running: boolean
+function EmailPanel({ c, activeEntities, activePhrases }: {
+  c: BECCase
+  activeEntities: Set<string>
+  activePhrases: { type: 'urgency' | 'secrecy' | 'override'; text: string }[]
 }) {
-  const { accent } = def
-  const Icon = def.icon
-  const done = score !== null
+  const { email: e, externalIntel: ei } = c
 
   return (
-    <div className={clsx(
-      'rounded-2xl border overflow-hidden transition-all duration-500',
-      accent.border,
-      done ? accent.bg : running ? 'bg-slate-900/80' : 'bg-slate-900/40 opacity-40'
-    )}>
-      {/* Header */}
-      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/5">
-        <div className={clsx('w-2 h-2 rounded-full shrink-0 transition-all', done ? accent.dot : running ? clsx(accent.dot, 'animate-pulse') : 'bg-slate-700')} />
-        <Icon className={clsx('w-3.5 h-3.5 shrink-0', accent.text)} />
-        <div className="flex-1 min-w-0">
-          <div className={clsx('text-xs font-bold truncate', accent.text)}>{def.name}</div>
-          <div className="text-[10px] text-slate-500 truncate">{def.model}</div>
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* Email header */}
+      <div className="px-4 py-2.5 border-b border-slate-800 bg-slate-900 shrink-0">
+        <div className="flex items-start gap-3">
+          <Mail className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0 space-y-0.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-bold text-slate-100 truncate">{e.subject}</span>
+            </div>
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-[11px] text-slate-400">
+                From <span className={clsx('font-mono', ei.emailDomainIsLookalike ? 'text-red-400' : 'text-slate-300')}>{e.senderAddress}</span>
+              </span>
+              <span className="text-[11px] text-slate-500">{e.receivedAt}</span>
+              {ei.emailDomainIsLookalike && (
+                <span className="text-[10px] bg-red-900/50 text-red-300 border border-red-700/50 px-1.5 py-0.5 rounded font-mono">
+                  ↔ {ei.lookalikeDomain}
+                </span>
+              )}
+              {e.senderDomainAgeDays < 90 && (
+                <span className="text-[10px] bg-orange-900/50 text-orange-300 border border-orange-700/50 px-1.5 py-0.5 rounded">
+                  domain {e.senderDomainAgeDays}d old
+                </span>
+              )}
+            </div>
+          </div>
         </div>
-        {running && !done && (
-          <span className="text-[10px] font-mono text-slate-500 animate-pulse shrink-0">ANALYZING</span>
-        )}
-        {done && (
-          <div className={clsx('text-xl font-bold font-mono shrink-0', accent.text)}>
-            {(score * 100).toFixed(0)}<span className="text-xs text-slate-600 ml-0.5">/ 100</span>
-          </div>
-        )}
       </div>
 
-      {/* Log lines */}
-      <div className="px-4 py-3 min-h-[7.5rem] font-mono text-[11px] space-y-1.5">
-        {lines.map((line, i) => (
-          <div key={i} className="flex items-start gap-1.5">
-            <span className="text-slate-600 shrink-0 mt-px">·</span>
-            <span className={clsx('leading-relaxed break-words', i === lines.length - 1 && running && !done ? 'text-slate-200' : 'text-slate-400')}>{line}</span>
-          </div>
-        ))}
-        {running && !done && lines.length > 0 && (
-          <div className="flex items-center gap-1.5 pl-3">
-            <span className="w-1.5 h-3 bg-slate-500 rounded-sm animate-pulse" />
-          </div>
-        )}
+      {/* Email body */}
+      <div className="flex-1 overflow-y-auto px-4 py-3 text-xs leading-relaxed font-mono whitespace-pre-wrap">
+        {e.bodySegments.map((seg, i) => {
+          if (!seg.entityType) return <span key={i} className="text-slate-400">{seg.text}</span>
+          const isActive = activeEntities.has(seg.entityType)
+          return (
+            <span
+              key={i}
+              title={seg.entityType}
+              className={clsx(
+                'rounded px-0.5 cursor-default transition-all duration-500',
+                isActive ? ENTITY_RISK[seg.entityType] : ENTITY_DIM[seg.entityType] ?? 'text-slate-500'
+              )}
+            >
+              {seg.text}
+            </span>
+          )
+        })}
       </div>
 
-      {/* Outputs */}
-      {done && score !== null && (
-        <div className="px-4 pb-3">
-          <div className="flex items-center gap-1 mb-2">
-            <div className={clsx('h-1.5 rounded-full transition-all duration-700', accent.bar)} style={{ width: `${score * 100}%` }} />
-            <div className="h-1.5 rounded-full bg-slate-800 flex-1" />
-          </div>
-          <div className="grid grid-cols-3 gap-1">
-            {def.outputKeys.map(key => (
-              <div key={key} className="rounded-lg bg-black/30 px-2 py-1.5">
-                <div className={clsx('text-[9px] font-mono uppercase tracking-wide mb-0.5', accent.label)}>{key}</div>
-                <div className="text-[10px] font-mono text-slate-300 truncate">—</div>
-              </div>
+      {/* NLP signal phrases (appear progressively as Agent 1 analyzes) */}
+      {activePhrases.length > 0 && (
+        <div className="px-3 py-2 border-t border-slate-800 bg-slate-900/80 shrink-0">
+          <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Email agent — detected signals</div>
+          <div className="flex flex-wrap gap-1.5">
+            {activePhrases.map((p, i) => (
+              <span key={i} className={clsx(
+                'text-[10px] font-mono px-2 py-0.5 rounded border',
+                p.type === 'urgency'  ? 'bg-red-900/50 text-red-300 border-red-700/50' :
+                p.type === 'secrecy'  ? 'bg-purple-900/50 text-purple-300 border-purple-700/50' :
+                                        'bg-amber-900/50 text-amber-300 border-amber-700/50'
+              )}>
+                {p.type === 'urgency' ? '⚡' : p.type === 'secrecy' ? '🔒' : '⚠'} {p.text.length > 35 ? p.text.slice(0, 35) + '…' : p.text}
+              </span>
             ))}
           </div>
         </div>
@@ -329,191 +287,293 @@ function AgentCard({ def, lines, score, running }: {
   )
 }
 
-// Identical to AgentCard but with real output values — rendered after score appears
-function AgentCardDone({ def, lines, result }: {
-  def: AgentDef
+// ── Signal card (middle bottom) ───────────────────────────────────────────────
+
+function SignalCard({ card, active }: { card: SCard; active: boolean }) {
+  const s = SEV_CARD[card.sev]
+  const Icon = card.Icon
+  return (
+    <div className={clsx(
+      'rounded-xl border p-3 transition-all duration-500',
+      active ? clsx(s.border, s.bg) : 'border-slate-800 bg-slate-900/30 opacity-30'
+    )}>
+      <div className="flex items-start gap-2">
+        <Icon className={clsx('w-3.5 h-3.5 shrink-0 mt-0.5', active ? s.icon : 'text-slate-600')} />
+        <div className="flex-1 min-w-0">
+          <div className={clsx('text-[10px] font-bold uppercase tracking-wider mb-0.5', active ? s.icon : 'text-slate-600')}>{card.label}</div>
+          <div className={clsx('text-xs font-semibold truncate', active ? s.val : 'text-slate-600')}>{card.value}</div>
+          <div className="text-[10px] text-slate-500 truncate mt-0.5">{card.detail}</div>
+        </div>
+        {active && <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0 mt-1', s.dot)} />}
+      </div>
+    </div>
+  )
+}
+
+// ── Agent row (right panel) ───────────────────────────────────────────────────
+
+function AgentRow({ def, lines, score }: {
+  def: typeof AGENTS[number]
   lines: string[]
-  result: AgentResult
+  score: number | null
 }) {
   const { accent } = def
   const Icon = def.icon
+  const running = lines.length > 0 && score === null
+  const done = score !== null
+  const pct = done ? Math.round(score * 100) : 0
+  const currentLine = lines[lines.length - 1] ?? ''
 
   return (
-    <div className={clsx('rounded-2xl border overflow-hidden', accent.border, accent.bg)}>
-      <div className="flex items-center gap-2.5 px-4 py-3 border-b border-white/5">
-        <div className={clsx('w-2 h-2 rounded-full shrink-0', accent.dot)} />
-        <Icon className={clsx('w-3.5 h-3.5 shrink-0', accent.text)} />
-        <div className="flex-1 min-w-0">
-          <div className={clsx('text-xs font-bold truncate', accent.text)}>{def.name}</div>
-          <div className="text-[10px] text-slate-500 truncate">{def.model}</div>
-        </div>
-        <div className={clsx('text-xl font-bold font-mono shrink-0', accent.text)}>
-          {(result.score * 100).toFixed(0)}<span className="text-xs text-slate-600 ml-0.5">/ 100</span>
-        </div>
+    <div className={clsx(
+      'rounded-xl border px-3 py-2.5 transition-all duration-300',
+      done ? accent.border + ' bg-slate-900' :
+      running ? 'border-slate-700 bg-slate-900' :
+      'border-slate-800/50 bg-slate-900/30 opacity-40'
+    )}>
+      <div className="flex items-center gap-2 mb-1.5">
+        <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', done ? accent.dot : running ? clsx(accent.dot, 'animate-pulse') : 'bg-slate-700')} />
+        <Icon className={clsx('w-3 h-3 shrink-0', accent.text)} />
+        <span className={clsx('text-[11px] font-bold flex-1 truncate', accent.text)}>{def.name}</span>
+        {done && (
+          <span className={clsx('text-sm font-bold font-mono shrink-0', accent.text)}>{pct}</span>
+        )}
+        {running && <span className="text-[9px] text-slate-500 font-mono animate-pulse">ANALYZING</span>}
       </div>
 
-      <div className="px-4 py-3 font-mono text-[11px] space-y-1.5">
-        {lines.map((line, i) => (
-          <div key={i} className="flex items-start gap-1.5">
-            <span className="text-slate-600 shrink-0 mt-px">·</span>
-            <span className="text-slate-400 leading-relaxed break-words">{line}</span>
+      {(running || done) && (
+        <div className="pl-5 mb-2">
+          <div className="text-[10px] font-mono text-slate-500 leading-relaxed line-clamp-2 min-h-[2.5rem]">
+            {currentLine}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
-      <div className="px-4 pb-3">
-        <div className="flex items-center gap-1 mb-2">
-          <div className={clsx('h-1.5 rounded-full transition-all duration-700', accent.bar)} style={{ width: `${result.score * 100}%` }} />
-          <div className="h-1.5 rounded-full bg-slate-800 flex-1" />
+      {done && (
+        <div className="pl-5 flex items-center gap-1.5">
+          <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+            <div className={clsx('h-1 rounded-full transition-all duration-700', accent.bar)} style={{ width: `${pct}%` }} />
+          </div>
+          <span className="text-[9px] text-slate-500 font-mono shrink-0">{pct}/100</span>
         </div>
-        <div className={clsx('grid gap-1', def.outputKeys.length === 2 ? 'grid-cols-2' : 'grid-cols-3')}>
-          {def.outputKeys.map(key => (
-            <div key={key} className="rounded-lg bg-black/30 px-2 py-1.5">
-              <div className={clsx('text-[9px] font-mono uppercase tracking-wide mb-0.5', accent.label)}>{key}</div>
-              <div className="text-[10px] font-mono text-slate-200 truncate">{result.outputs[key] ?? '—'}</div>
-            </div>
-          ))}
-        </div>
-      </div>
+      )}
     </div>
   )
 }
 
-function EnsemblePanel({ c, agentResults, visible }: {
+// ── Ensemble score (right panel bottom) ──────────────────────────────────────
+
+function EnsembleScore({ c, agentData, visible }: {
   c: BECCase
-  agentResults: Record<AgentId, AgentResult>
+  agentData: Record<AgentId, { score: number; lines: string[] }>
   visible: boolean
 }) {
-  const [displayScore, setDisplayScore] = useState(0)
+  const [disp, setDisp] = useState(0)
   const rafRef = useRef<number | null>(null)
-  const target = c.anomalyScore
 
   useEffect(() => {
-    if (!visible) { setDisplayScore(0); return }
-    const duration = 1100
-    const start = performance.now()
+    if (!visible) { setDisp(0); return }
+    const target = c.anomalyScore
+    const t0 = performance.now()
     const tick = (now: number) => {
-      const t = Math.min((now - start) / duration, 1)
-      const eased = 1 - Math.pow(1 - t, 3)
-      setDisplayScore(Math.round(eased * target * 10) / 10)
-      if (t < 1) rafRef.current = requestAnimationFrame(tick)
+      const p = Math.min((now - t0) / 1100, 1)
+      const e = 1 - Math.pow(1 - p, 3)
+      setDisp(Math.round(e * target * 10) / 10)
+      if (p < 1) rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
-    return () => { if (rafRef.current !== null) cancelAnimationFrame(rafRef.current) }
-  }, [visible, target])
-
-  const r = 56, cx = 72, cy = 72
-  const circumference = 2 * Math.PI * r
-  const dashOffset = circumference * (1 - (visible ? displayScore / 100 : 0))
-
-  const scoreColor = target >= 80 ? { stroke: '#ef4444', text: 'text-red-400', bar: 'bg-red-500', label: 'CRITICAL RISK', labelColor: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30' }
-    : target >= 65 ? { stroke: '#f97316', text: 'text-orange-400', bar: 'bg-orange-500', label: 'HIGH RISK', labelColor: 'text-orange-400', bg: 'bg-orange-500/10 border-orange-500/30' }
-    : target >= 45 ? { stroke: '#f59e0b', text: 'text-amber-400', bar: 'bg-amber-500', label: 'MEDIUM RISK', labelColor: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/30' }
-    : { stroke: '#10b981', text: 'text-emerald-400', bar: 'bg-emerald-500', label: 'LOW RISK', labelColor: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/30' }
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
+  }, [visible, c.anomalyScore])
 
   if (!visible) return null
 
+  const target = c.anomalyScore
+  const col = target >= 80 ? { stroke: '#ef4444', text: 'text-red-400', label: 'CRITICAL', badge: 'bg-red-950 text-red-300 border-red-700/50' }
+    : target >= 65 ? { stroke: '#f97316', text: 'text-orange-400', label: 'HIGH',     badge: 'bg-orange-950 text-orange-300 border-orange-700/50' }
+    : target >= 45 ? { stroke: '#f59e0b', text: 'text-amber-400',  label: 'MEDIUM',   badge: 'bg-amber-950 text-amber-300 border-amber-700/50' }
+    : { stroke: '#10b981', text: 'text-emerald-400', label: 'LOW', badge: 'bg-emerald-950 text-emerald-300 border-emerald-700/50' }
+
+  const r = 38, cx = 46, cy = 46, circ = 2 * Math.PI * r
+  const dash = circ * (1 - disp / 100)
+
   return (
-    <div className="rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden mt-4 animate-fade-in">
-      <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-800">
-        <Activity className="w-4 h-4 text-slate-400" />
-        <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">Ensemble Risk Assessment</span>
-        <span className="ml-auto text-xs text-slate-500">Orchestrator — weighted combination of 5 agents</span>
-      </div>
+    <div className="border-t border-slate-800 bg-slate-900/80 p-3 animate-fade-in">
+      <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-1">Orchestrator — Ensemble Score</div>
 
-      <div className="p-6 flex flex-col md:flex-row items-center gap-8">
+      <div className="flex items-center gap-3 mb-3">
+        <svg width="92" height="92" viewBox="0 0 92 92" className="shrink-0">
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1e293b" strokeWidth="10" />
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke={col.stroke} strokeWidth="10"
+            strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dash}
+            transform={`rotate(-90 ${cx} ${cy})`}
+            style={{ transition: 'stroke-dashoffset 1.1s cubic-bezier(0.34,1.2,0.64,1)' }}
+          />
+          <text x={cx} y={cy - 4} textAnchor="middle" fill={col.stroke} fontSize="18" fontWeight="800" fontFamily="ui-monospace,monospace">{disp.toFixed(0)}</text>
+          <text x={cx} y={cy + 13} textAnchor="middle" fill="#475569" fontSize="9" fontFamily="ui-monospace,monospace">/100</text>
+        </svg>
 
-        {/* Gauge */}
-        <div className="flex flex-col items-center gap-3 shrink-0">
-          <svg width="144" height="144" viewBox="0 0 144 144">
-            <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1e293b" strokeWidth="14" />
-            <circle
-              cx={cx} cy={cy} r={r}
-              fill="none"
-              stroke={scoreColor.stroke}
-              strokeWidth="14"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={dashOffset}
-              transform={`rotate(-90 ${cx} ${cy})`}
-              style={{ transition: 'stroke-dashoffset 1.1s cubic-bezier(0.34,1.2,0.64,1)' }}
-            />
-            <text x={cx} y={cy - 6} textAnchor="middle" fill={scoreColor.stroke} fontSize="26" fontWeight="800" fontFamily="ui-monospace,monospace">
-              {displayScore.toFixed(1)}
-            </text>
-            <text x={cx} y={cy + 14} textAnchor="middle" fill="#64748b" fontSize="11" fontFamily="ui-monospace,monospace">
-              / 100
-            </text>
-          </svg>
-
-          <div className={clsx('rounded-full border px-4 py-1.5 text-xs font-bold uppercase tracking-widest', scoreColor.bg, scoreColor.labelColor)}>
-            {scoreColor.label}
-          </div>
-          <div className="text-xs text-slate-500 text-center font-mono">
-            {c.status.toUpperCase()} · {c.id}
-          </div>
-        </div>
-
-        {/* Agent breakdown */}
-        <div className="flex-1 space-y-2.5 w-full">
+        <div className="flex-1 space-y-1.5">
           {AGENTS.map(def => {
-            const res = agentResults[def.id]
-            const pct = Math.round(res.score * 100)
+            const pct = Math.round(agentData[def.id].score * 100)
             return (
-              <div key={def.id} className="flex items-center gap-3">
-                <div className={clsx('text-[10px] font-bold w-32 shrink-0', def.accent.text)}>{def.name}</div>
-                <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
-                  <div
-                    className={clsx('h-2 rounded-full transition-all duration-700', def.accent.bar)}
-                    style={{ width: `${pct}%`, transitionDelay: `${AGENTS.indexOf(def) * 80}ms` }}
-                  />
+              <div key={def.id} className="flex items-center gap-1.5">
+                <span className={clsx('text-[9px] font-bold w-20 shrink-0 truncate', def.accent.text)}>{def.name.split(' ')[0]}</span>
+                <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+                  <div className={clsx('h-1 rounded-full', def.accent.bar)} style={{ width: `${pct}%` }} />
                 </div>
-                <div className={clsx('text-xs font-mono font-bold w-10 text-right shrink-0', def.accent.text)}>{pct}</div>
+                <span className={clsx('text-[9px] font-mono w-6 text-right shrink-0', def.accent.text)}>{pct}</span>
               </div>
             )
           })}
-
-          <div className="mt-4 pt-3 border-t border-slate-800 text-xs text-slate-500 font-mono leading-relaxed">
-            Weights: Email ×0.25 · Payment ×0.28 · Identity ×0.20 · Graph ×0.15 · Intel ×0.12
-          </div>
         </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className={clsx('text-[10px] font-bold border rounded-full px-2.5 py-1 uppercase tracking-widest', col.badge)}>{col.label} RISK</span>
+        <span className="text-[10px] text-slate-500 font-mono ml-auto">{c.status.toUpperCase()}</span>
       </div>
     </div>
   )
 }
-
-// ── Animation state type ──────────────────────────────────────────────────────
-
-type Phase = 'idle' | 'orchestrating' | 'dispatched' | 'scoring' | 'ensemble'
-
-const emptyLines = (): Record<AgentId, string[]> => ({ email: [], payment: [], identity: [], graph: [], intel: [] })
-const emptyScores = (): Record<AgentId, number | null> => ({ email: null, payment: null, identity: null, graph: null, intel: null })
 
 // ── Case list item ────────────────────────────────────────────────────────────
 
 function CaseRow({ c, selected, onSelect }: { c: BECCase; selected: boolean; onSelect: () => void }) {
-  const sev = c.severity === 'critical' ? { dot: 'bg-red-500', text: 'text-red-400', bg: '' }
-    : c.severity === 'high' ? { dot: 'bg-orange-500', text: 'text-orange-400', bg: '' }
-    : { dot: 'bg-amber-400', text: 'text-amber-400', bg: '' }
-
+  const dot = c.severity === 'critical' ? 'bg-red-500' : c.severity === 'high' ? 'bg-orange-500' : 'bg-amber-400'
+  const txt = c.severity === 'critical' ? 'text-red-400' : c.severity === 'high' ? 'text-orange-400' : 'text-amber-400'
   return (
-    <button
-      onClick={onSelect}
-      className={clsx(
-        'w-full text-left px-4 py-3.5 border-b border-slate-800/80 transition-all',
-        selected ? 'bg-slate-800 border-l-2 border-l-sky-500' : 'hover:bg-slate-800/50'
-      )}
-    >
+    <button onClick={onSelect} className={clsx('w-full text-left px-4 py-3 border-b border-slate-800/80 transition-all', selected ? 'bg-slate-800 border-l-2 border-l-sky-500' : 'hover:bg-slate-800/50')}>
       <div className="flex items-center gap-2 mb-1">
-        <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0 mt-px', sev.dot)} />
-        <span className="font-mono text-[10px] text-slate-400">{c.id}</span>
-        <span className={clsx('ml-auto text-[10px] font-bold uppercase', sev.text)}>{c.severity}</span>
+        <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', dot)} />
+        <span className="font-mono text-[10px] text-slate-400 flex-1 truncate">{c.id}</span>
+        <span className={clsx('text-[9px] font-bold uppercase', txt)}>{c.severity}</span>
       </div>
       <div className="text-xs font-semibold text-slate-200 truncate pl-3.5">{c.relationship.clientName}</div>
-      <div className="text-[11px] text-slate-500 truncate pl-3.5 mt-0.5">
-        {c.instruction.currency} {c.instruction.amount.toLocaleString()} · {c.instruction.beneficiaryCountry}
-      </div>
+      <div className="text-[11px] text-slate-500 truncate pl-3.5">{c.instruction.currency} {c.instruction.amount.toLocaleString()} · {c.instruction.beneficiaryCountry}</div>
     </button>
+  )
+}
+
+// ── Detection layout (keyed so it remounts on case change) ───────────────────
+
+function DetectionLayout({ c }: { c: BECCase }) {
+  const signalCards = buildSignalCards(c)
+  const agentData   = computeAgentData(c)
+
+  const [agentLines,   setAgentLines]   = useState<Record<AgentId, string[]>>({ email:[], payment:[], identity:[], graph:[], intel:[] })
+  const [agentScores,  setAgentScores]  = useState<Record<AgentId, number | null>>({ email:null, payment:null, identity:null, graph:null, intel:null })
+  const [activeEnts,   setActiveEnts]   = useState<Set<string>>(new Set())
+  const [activeCards,  setActiveCards]  = useState<Set<string>>(new Set())
+  const [phrases,      setPhrases]      = useState<{ type: 'urgency'|'secrecy'|'override'; text: string }[]>([])
+  const [orchLine,     setOrchLine]     = useState('')
+  const [ensembleVis,  setEnsembleVis]  = useState(false)
+
+  useEffect(() => {
+    const T: ReturnType<typeof setTimeout>[] = []
+
+    T.push(setTimeout(() => setOrchLine(`Initiating BEC detection — ${c.id} · ${c.relationship.clientName} · dispatching 5 agents…`), 120))
+
+    const start = 500
+    AGENTS.forEach((def, ai) => {
+      const data = agentData[def.id]
+      const jitter = ai * 90
+
+      data.lines.forEach((line, li) => {
+        const t = start + jitter + li * 310
+
+        T.push(setTimeout(() => setAgentLines(p => ({ ...p, [def.id]: [...p[def.id], line] })), t))
+
+        // Entity type activations
+        const entTypes = ENTITY_ACTIVATIONS[def.id]?.[li]
+        if (entTypes) T.push(setTimeout(() => setActiveEnts(p => { const n = new Set(p); entTypes.forEach(e => n.add(e)); return n }), t + 80))
+
+        // NLP phrase reveals (email agent only)
+        if (def.id === 'email' && li === 1) {
+          c.nlpAnalysis.urgencyPhrases.forEach((ph, pi) => T.push(setTimeout(() => setPhrases(p => [...p, { type:'urgency', text:ph }]), t + 100 + pi * 120)))
+          c.nlpAnalysis.secrecyPhrases.forEach((ph, pi) => T.push(setTimeout(() => setPhrases(p => [...p, { type:'secrecy', text:ph }]), t + 200 + pi * 120)))
+        }
+        if (def.id === 'email' && li === 1) {
+          c.nlpAnalysis.overridePhrases.forEach((ph, pi) => T.push(setTimeout(() => setPhrases(p => [...p, { type:'override', text:ph }]), t + 350 + pi * 120)))
+        }
+
+        // Signal card activations
+        signalCards.filter(sc => sc.agentId === def.id && sc.atLine === li).forEach(sc => {
+          T.push(setTimeout(() => setActiveCards(p => new Set([...p, sc.id])), t + 150))
+        })
+      })
+
+      const scoreAt = start + jitter + data.lines.length * 310 + 350
+      T.push(setTimeout(() => setAgentScores(p => ({ ...p, [def.id]: data.score })), scoreAt))
+    })
+
+    const allDone = start + 90 * 4 + 5 * 310 + 350 + 500
+    T.push(setTimeout(() => setEnsembleVis(true), allDone))
+
+    return () => T.forEach(clearTimeout)
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <>
+      {/* Middle panel */}
+      <div className="flex-1 flex flex-col min-w-0 border-x border-slate-800 overflow-hidden">
+
+        {/* Case strip */}
+        <div className="flex items-center gap-2 px-4 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
+          <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', c.severity === 'critical' ? 'bg-red-500' : c.severity === 'high' ? 'bg-orange-500' : 'bg-amber-400')} />
+          <span className="font-mono text-[10px] text-slate-400">{c.id}</span>
+          <span className="text-xs font-bold text-slate-200">{c.relationship.clientName}</span>
+          <span className="text-slate-600 text-xs">·</span>
+          <span className="text-[11px] text-slate-400">{c.email.receivedAt}</span>
+        </div>
+
+        {/* Email viewer */}
+        <div className="flex-1 overflow-hidden min-h-0">
+          <EmailPanel c={c} activeEntities={activeEnts} activePhrases={phrases} />
+        </div>
+
+        {/* Signal cards */}
+        <div className="h-56 shrink-0 border-t border-slate-800 overflow-y-auto">
+          <div className="px-3 pt-2.5 pb-1 border-b border-slate-800/60 flex items-center gap-2">
+            <Activity className="w-3 h-3 text-slate-500" />
+            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Risk Signals — activated by agents in real time</span>
+          </div>
+          <div className="p-3 grid grid-cols-2 gap-2">
+            {signalCards.map(card => (
+              <SignalCard key={card.id} card={card} active={activeCards.has(card.id)} />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Right panel */}
+      <div className="w-72 shrink-0 flex flex-col overflow-hidden">
+        {/* Orchestrator line */}
+        {orchLine && (
+          <div className="px-3 py-2 border-b border-slate-800 bg-slate-900 shrink-0">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Cpu className="w-3 h-3 text-emerald-500" />
+              <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">Orchestrator</span>
+            </div>
+            <div className="text-[10px] font-mono text-slate-400 leading-relaxed pl-4">{orchLine}</div>
+          </div>
+        )}
+
+        {/* Agent rows */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
+          {AGENTS.map(def => (
+            <AgentRow
+              key={def.id}
+              def={def}
+              lines={agentLines[def.id]}
+              score={agentScores[def.id]}
+            />
+          ))}
+        </div>
+
+        {/* Ensemble */}
+        <EnsembleScore c={c} agentData={agentData} visible={ensembleVis} />
+      </div>
+    </>
   )
 }
 
@@ -521,192 +581,34 @@ function CaseRow({ c, selected, onSelect }: { c: BECCase; selected: boolean; onS
 
 export function InvestigationHub() {
   const [selected, setSelected] = useState<BECCase | null>(null)
-  const [orchOpen, setOrchOpen] = useState<string[]>([])
-  const [phase, setPhase] = useState<Phase>('idle')
-  const [agentLines, setAgentLines] = useState<Record<AgentId, string[]>>(emptyLines)
-  const [agentScores, setAgentScores] = useState<Record<AgentId, number | null>>(emptyScores)
-  const [orchClose, setOrchClose] = useState<string[]>([])
-  const [ensembleVisible, setEnsembleVisible] = useState(false)
-  const [agentResults, setAgentResults] = useState<Record<AgentId, AgentResult> | null>(null)
-
-  useEffect(() => {
-    if (!selected) return
-
-    // Reset
-    setOrchOpen([])
-    setPhase('idle')
-    setAgentLines(emptyLines())
-    setAgentScores(emptyScores())
-    setOrchClose([])
-    setEnsembleVisible(false)
-    setAgentResults(null)
-
-    const computed = computeAll(selected)
-    setAgentResults(computed)
-
-    const openLines = [
-      `Initiating BEC detection sequence for ${selected.id} — ${selected.relationship.clientName}`,
-      `Context loaded: email corpus · payment instruction · counterparty history · identity & session · external intel`,
-      `Severity: ${selected.severity.toUpperCase()} | Dispatching 5 specialist agents in parallel…`,
-    ]
-    const closeLines = [
-      `All 5 agents complete — computing weighted ensemble…`,
-      `Weights: Email ×0.25 · Payment ×0.28 · Identity ×0.20 · Graph ×0.15 · Intel ×0.12`,
-    ]
-
-    const T: ReturnType<typeof setTimeout>[] = []
-
-    openLines.forEach((line, i) => T.push(setTimeout(() => {
-      setOrchOpen(p => [...p, line])
-      if (i === 0) setPhase('orchestrating')
-    }, i * 430)))
-
-    const agentStart = openLines.length * 430 + 220
-    T.push(setTimeout(() => setPhase('dispatched'), agentStart - 80))
-
-    AGENTS.forEach((def, ai) => {
-      const data = computed[def.id]
-      const jitter = ai * 95
-      data.lines.forEach((line, li) => T.push(setTimeout(() => {
-        setAgentLines(p => ({ ...p, [def.id]: [...p[def.id], line] }))
-      }, agentStart + jitter + li * 295)))
-
-      const scoreAt = agentStart + jitter + data.lines.length * 295 + 320
-      T.push(setTimeout(() => {
-        setAgentScores(p => ({ ...p, [def.id]: data.score }))
-      }, scoreAt))
-    })
-
-    const allDoneAt = agentStart + 95 * 4 + 5 * 295 + 320 + 500
-    closeLines.forEach((line, i) => T.push(setTimeout(() => {
-      setOrchClose(p => [...p, line])
-      if (i === 0) setPhase('scoring')
-    }, allDoneAt + i * 460)))
-
-    const ensembleAt = allDoneAt + closeLines.length * 460 + 350
-    T.push(setTimeout(() => { setEnsembleVisible(true); setPhase('ensemble') }, ensembleAt))
-
-    return () => T.forEach(clearTimeout)
-  }, [selected?.id])
 
   return (
     <div className="flex-1 flex overflow-hidden bg-slate-950">
 
-      {/* Case list */}
-      <div className="w-72 shrink-0 bg-slate-900 border-r border-slate-800 overflow-y-auto flex flex-col">
-        <div className="px-4 py-3.5 border-b border-slate-800 flex items-center gap-2">
-          <Cpu className="w-4 h-4 text-sky-400" />
+      {/* Left: case list */}
+      <div className="w-52 shrink-0 bg-slate-900 border-r border-slate-800 overflow-y-auto flex flex-col">
+        <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2 shrink-0">
+          <Cpu className="w-3.5 h-3.5 text-sky-400" />
           <span className="text-xs font-bold text-slate-200 uppercase tracking-widest">Investigations</span>
-          <span className="ml-auto text-[10px] text-slate-500 font-mono">{BEC_CASES.length} cases</span>
         </div>
         {BEC_CASES.map(c => (
           <CaseRow key={c.id} c={c} selected={selected?.id === c.id} onSelect={() => setSelected(c)} />
         ))}
       </div>
 
-      {/* Detection panel */}
-      <div className="flex-1 overflow-y-auto">
-        {!selected ? (
-          <div className="h-full flex flex-col items-center justify-center gap-4 text-center px-8">
-            <div className="w-16 h-16 rounded-2xl bg-slate-800 flex items-center justify-center">
-              <Cpu className="w-8 h-8 text-slate-600" />
-            </div>
-            <div>
-              <div className="text-sm font-semibold text-slate-400 mb-1">Select a case to begin detection</div>
-              <div className="text-xs text-slate-600">5 specialist agents will analyze extracted data in parallel<br />and produce a weighted ensemble risk score</div>
-            </div>
+      {/* Detection area (remounts on case change via key) */}
+      {selected ? (
+        <DetectionLayout key={selected.id} c={selected} />
+      ) : (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
+          <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center">
+            <Cpu className="w-7 h-7 text-slate-700" />
           </div>
-        ) : (
-          <div className="p-6 max-w-5xl mx-auto space-y-4">
+          <div className="text-sm font-semibold text-slate-500">Select a case to begin</div>
+          <div className="text-xs text-slate-600 max-w-xs">5 specialist agents will analyse the email, payment instruction, identity, relationship graph, and external intelligence in real time</div>
+        </div>
+      )}
 
-            {/* Case strip */}
-            <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-900 border border-slate-800">
-              <div className={clsx('w-2 h-2 rounded-full shrink-0',
-                selected.severity === 'critical' ? 'bg-red-500' : selected.severity === 'high' ? 'bg-orange-500' : 'bg-amber-400')} />
-              <span className="font-mono text-xs text-slate-400">{selected.id}</span>
-              <span className="text-sm font-bold text-slate-100">{selected.relationship.clientName}</span>
-              <span className="text-xs text-slate-500">·</span>
-              <span className="text-xs text-slate-400">{selected.instruction.currency} {selected.instruction.amount.toLocaleString()} → {selected.instruction.beneficiaryName} ({selected.instruction.beneficiaryCountry})</span>
-              <div className={clsx('ml-auto text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full border',
-                selected.status === 'blocked' ? 'text-red-400 border-red-500/40 bg-red-500/10' :
-                selected.status === 'flagged' ? 'text-orange-400 border-orange-500/40 bg-orange-500/10' :
-                'text-emerald-400 border-emerald-500/40 bg-emerald-500/10'
-              )}>
-                {selected.status}
-              </div>
-            </div>
-
-            {/* Orchestrator open */}
-            {orchOpen.length > 0 && (
-              <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800">
-                  <Cpu className="w-3.5 h-3.5 text-emerald-500" />
-                  <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Orchestrator</span>
-                  {phase === 'dispatched' && <span className="ml-auto text-[10px] text-slate-500 font-mono animate-pulse">agents running…</span>}
-                  {phase === 'scoring' && <span className="ml-auto text-[10px] text-slate-500 font-mono animate-pulse">computing ensemble…</span>}
-                  {phase === 'ensemble' && <span className="ml-auto text-[10px] text-emerald-500 font-mono">complete</span>}
-                </div>
-                <div className="px-4 py-3">
-                  <Terminal lines={orchOpen} active={phase === 'orchestrating'} />
-                </div>
-              </div>
-            )}
-
-            {/* Agent grid — 3 top + 2 bottom */}
-            {phase !== 'idle' && phase !== 'orchestrating' && (
-              <>
-                <div className="grid grid-cols-3 gap-3">
-                  {AGENTS.slice(0, 3).map(def => {
-                    const lines = agentLines[def.id]
-                    const score = agentScores[def.id]
-                    const res = agentResults?.[def.id]
-                    return score !== null && res ? (
-                      <AgentCardDone key={def.id} def={def} lines={lines} result={res} />
-                    ) : (
-                      <AgentCard key={def.id} def={def} lines={lines} score={score} running={true} />
-                    )
-                  })}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  {AGENTS.slice(3).map(def => {
-                    const lines = agentLines[def.id]
-                    const score = agentScores[def.id]
-                    const res = agentResults?.[def.id]
-                    return score !== null && res ? (
-                      <AgentCardDone key={def.id} def={def} lines={lines} result={res} />
-                    ) : (
-                      <AgentCard key={def.id} def={def} lines={lines} score={score} running={true} />
-                    )
-                  })}
-                </div>
-              </>
-            )}
-
-            {/* Orchestrator close */}
-            {orchClose.length > 0 && (
-              <div className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 border-b border-slate-800">
-                  <Cpu className="w-3.5 h-3.5 text-emerald-500" />
-                  <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Orchestrator — Ensemble</span>
-                </div>
-                <div className="px-4 py-3">
-                  <Terminal lines={orchClose} active={false} />
-                </div>
-              </div>
-            )}
-
-            {/* Ensemble panel */}
-            {agentResults && (
-              <EnsemblePanel
-                c={selected}
-                agentResults={agentResults}
-                visible={ensembleVisible}
-              />
-            )}
-
-          </div>
-        )}
-      </div>
     </div>
   )
 }
