@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import clsx from 'clsx'
 import { AGENTS } from '../data/agents'
-import type { Agent, AgentStatus } from '../types'
+import type { Agent } from '../types'
 
 // ── Agent accent colours ──────────────────────────────────────────────────────
 
@@ -21,23 +21,10 @@ const AGENT_ACCENT: Record<string, { dot: string; text: string; bg: string; bar:
   'regulatory-threshold-monitor': { dot: 'bg-slate-500',   text: 'text-slate-600',   bg: 'bg-slate-50',   bar: 'bg-slate-500',   border: 'border-slate-300',   ring: 'ring-slate-200'   },
 }
 
-const STATUS_LABEL: Record<AgentStatus, { text: string; badge: string }> = {
-  idle:      { text: 'Idle',      badge: 'bg-gray-100 text-gray-500' },
-  analyzing: { text: 'Analyzing', badge: 'bg-amber-50 text-amber-700 border border-amber-200' },
-  complete:  { text: 'Complete',  badge: 'bg-emerald-50 text-emerald-700' },
-}
-
-const STATUS_DOT: Record<AgentStatus, string> = {
-  idle:      'bg-gray-300',
-  analyzing: 'bg-amber-500 animate-pulse',
-  complete:  'bg-emerald-500',
-}
-
 // ── Agent card ────────────────────────────────────────────────────────────────
 
 function AgentCard({ agent, isSelected, onSelect }: { agent: Agent; isSelected: boolean; onSelect: () => void }) {
   const accent = AGENT_ACCENT[agent.id] ?? AGENT_ACCENT['regulatory-threshold-monitor']
-  const sl     = STATUS_LABEL[agent.status]
   const f1     = ((2 * agent.precision * agent.recall) / (agent.precision + agent.recall)).toFixed(1)
 
   return (
@@ -51,11 +38,7 @@ function AgentCard({ agent, isSelected, onSelect }: { agent: Agent; isSelected: 
       )}
     >
       <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className={clsx('w-2 h-2 rounded-full shrink-0', STATUS_DOT[agent.status])} />
-          <span className={clsx('text-[10px] font-semibold px-2 py-0.5 rounded-full', sl.badge)}>{sl.text}</span>
-        </div>
-        <span className="text-[10px] font-mono text-gray-400">{agent.decisionsToday} today</span>
+        <span className="text-[10px] font-mono text-gray-400">{agent.decisionsToday} decisions today</span>
       </div>
 
       <h3 className={clsx('text-sm font-bold mb-0.5 leading-tight', isSelected ? accent.text : 'text-gray-900')}>{agent.name}</h3>
@@ -84,7 +67,6 @@ export function AgentMonitor() {
   const [selectedId, setSelectedId] = useState<string>(AGENTS[0].id)
   const agent  = AGENTS.find(a => a.id === selectedId) ?? AGENTS[0]
   const accent = AGENT_ACCENT[agent.id] ?? AGENT_ACCENT['regulatory-threshold-monitor']
-  const sl     = STATUS_LABEL[agent.status]
 
   const chartData = [
     { name: 'Precision', value: agent.precision },
@@ -105,11 +87,7 @@ export function AgentMonitor() {
             <h1 className="text-lg font-bold text-gray-900">Agent Monitor</h1>
             <p className="text-xs text-gray-400 mt-0.5">Real-time status and performance for all {AGENTS.length} Vigil surveillance agents</p>
           </div>
-          <div className="flex items-center gap-3 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />{AGENTS.filter(a => a.status === 'complete').length} complete</span>
-            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />{AGENTS.filter(a => a.status === 'analyzing').length} analyzing</span>
-            <span className="flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-gray-300" />{AGENTS.filter(a => a.status === 'idle').length} idle</span>
-          </div>
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{AGENTS.length} agents</span>
         </div>
 
         {/* Front-line agents */}
@@ -144,10 +122,8 @@ export function AgentMonitor() {
           {/* Performance panel */}
           <div className={clsx('col-span-2 rounded-xl border shadow-sm overflow-hidden', accent.border)}>
             <div className="px-5 py-4 border-b border-gray-200 bg-white">
-              <div className="flex items-center gap-2 mb-2">
-                <span className={clsx('w-2 h-2 rounded-full shrink-0', STATUS_DOT[agent.status])} />
-                <span className={clsx('text-[10px] font-semibold px-2 py-0.5 rounded-full', sl.badge)}>{sl.text}</span>
-                <span className={clsx('ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full border', accent.bg, accent.border, accent.text)}>
+              <div className="flex items-center justify-end mb-2">
+                <span className={clsx('text-[10px] font-bold px-2 py-0.5 rounded-full border', accent.bg, accent.border, accent.text)}>
                   {agent.showInOverview ? 'Front-line' : 'Specialist'}
                 </span>
               </div>
