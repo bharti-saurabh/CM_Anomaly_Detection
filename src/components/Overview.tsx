@@ -1,4 +1,4 @@
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { ComposedChart, Bar, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import clsx from 'clsx'
 import { AGENTS } from '../data/agents'
 import { TIME_SERIES } from '../data/timeSeries'
@@ -82,31 +82,160 @@ export function Overview() {
         </div>
 
         {/* 30-Day Anomaly Timeline */}
-        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-700">30-Day Anomaly Timeline</h2>
-              <p className="text-xs text-gray-400 mt-0.5">Daily transaction volume vs. average anomaly score</p>
-            </div>
-            <div className="flex items-center gap-4 text-xs text-gray-400">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded bg-blue-200 inline-block" /> Volume</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-0.5 bg-red-400 inline-block" /> Avg Score</span>
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          {/* Header */}
+          <div className="px-5 pt-5 pb-4 border-b border-gray-100">
+            <div className="flex items-start justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-700">30-Day Anomaly Timeline</h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Daily transaction volume (bars) overlaid with ensemble anomaly score (line) — Apr 02 to May 01, 2026
+                </p>
+              </div>
+              <div className="flex items-center gap-4 text-[11px] text-gray-400 shrink-0 ml-6">
+                <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-sm bg-blue-100 border border-blue-200" /> Daily volume</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-0.5 bg-red-400" /> Anomaly score</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-0.5 bg-orange-400 border-dashed" style={{ borderTop: '1.5px dashed #fb923c' }} /> Warning (40)</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-0.5 bg-red-500 border-dashed" style={{ borderTop: '1.5px dashed #ef4444' }} /> Critical (75)</span>
+              </div>
             </div>
           </div>
-          <ResponsiveContainer width="100%" height={200}>
-            <AreaChart data={TIME_SERIES} margin={{ top: 5, right: 10, bottom: 0, left: -10 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} interval={4} />
-              <YAxis yAxisId="left"  tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} />
-              <Tooltip
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0', background: '#fff' }}
-                labelStyle={{ fontWeight: 600, color: '#1e293b' }}
-              />
-              <Area yAxisId="left"  type="monotone" dataKey="volume"   stroke="#93c5fd" fill="#dbeafe" strokeWidth={1.5} name="Volume" />
-              <Area yAxisId="right" type="monotone" dataKey="avgScore" stroke="#ef4444" fill="#fee2e2" strokeWidth={2}   name="Avg Score" />
-            </AreaChart>
-          </ResponsiveContainer>
+
+          {/* Chart */}
+          <div className="px-5 pt-4 pb-2">
+            <ResponsiveContainer width="100%" height={220}>
+              <ComposedChart data={TIME_SERIES} margin={{ top: 8, right: 16, bottom: 0, left: -10 }}>
+                <defs>
+                  <linearGradient id="scoreGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%"   stopColor="#ef4444" stopOpacity={0.18} />
+                    <stop offset="100%" stopColor="#ef4444" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f8fafc" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={false}
+                  interval={4}
+                />
+                <YAxis
+                  yAxisId="left"
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={28}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  domain={[0, 100]}
+                  tick={{ fontSize: 10, fill: '#94a3b8' }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={28}
+                />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null
+                    const vol   = payload.find(p => p.dataKey === 'volume')?.value as number | undefined
+                    const score = payload.find(p => p.dataKey === 'avgScore')?.value as number | undefined
+                    const count = payload.find(p => p.dataKey === 'anomalyCount')?.value as number | undefined
+                    const isToday = label === 'May 01'
+                    return (
+                      <div className="bg-white border border-gray-200 rounded-xl shadow-lg px-3.5 py-3 text-xs min-w-[160px]">
+                        <div className="font-bold text-gray-800 mb-2">{label}{isToday ? ' — Today' : ''}</div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between gap-4">
+                            <span className="text-gray-400">Transaction volume</span>
+                            <span className="font-mono font-semibold text-blue-600">{vol}</span>
+                          </div>
+                          <div className="flex justify-between gap-4">
+                            <span className="text-gray-400">Anomaly score</span>
+                            <span className={clsx('font-mono font-bold', score !== undefined && score >= 75 ? 'text-red-600' : score !== undefined && score >= 40 ? 'text-orange-600' : 'text-gray-600')}>{score}</span>
+                          </div>
+                          <div className="flex justify-between gap-4">
+                            <span className="text-gray-400">Cases flagged</span>
+                            <span className="font-mono font-semibold text-gray-700">{count}</span>
+                          </div>
+                          {isToday && (
+                            <div className="mt-2 pt-2 border-t border-gray-100 text-[10px] text-red-600 font-semibold">
+                              TR-8842 · CU-4419 · PR-9102
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  }}
+                />
+
+                {/* Volume bars (background) */}
+                <Bar yAxisId="left" dataKey="volume" name="Volume" fill="#dbeafe" stroke="#bfdbfe" strokeWidth={0.5} radius={[2, 2, 0, 0]} />
+
+                {/* Warning threshold */}
+                <ReferenceLine yAxisId="right" y={40} stroke="#fb923c" strokeDasharray="4 3" strokeWidth={1.5}
+                  label={{ value: 'Warning', position: 'insideTopRight', fontSize: 9, fill: '#fb923c', fontWeight: 700, dy: -2 }} />
+
+                {/* Critical threshold */}
+                <ReferenceLine yAxisId="right" y={75} stroke="#ef4444" strokeDasharray="4 3" strokeWidth={1.5}
+                  label={{ value: 'Critical', position: 'insideTopRight', fontSize: 9, fill: '#ef4444', fontWeight: 700, dy: -2 }} />
+
+                {/* Today marker */}
+                <ReferenceLine yAxisId="left" x="May 01" stroke="#ef4444" strokeWidth={1.5} strokeOpacity={0.5} />
+
+                {/* Anomaly score area */}
+                <Area
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="avgScore"
+                  name="Anomaly Score"
+                  stroke="#ef4444"
+                  strokeWidth={2}
+                  fill="url(#scoreGrad)"
+                  dot={(props: { cx: number; cy: number; payload: { date: string } }) =>
+                    props.payload.date === 'May 01'
+                      ? <circle key="dot-today" cx={props.cx} cy={props.cy} r={5} fill="#ef4444" stroke="#fff" strokeWidth={2} />
+                      : <g key={`empty-${props.cx}`} />
+                  }
+                  activeDot={{ r: 4, fill: '#ef4444', stroke: '#fff', strokeWidth: 2 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Narrative strip */}
+          <div className="mx-5 mb-5 mt-1 rounded-xl border border-gray-100 bg-gray-50 divide-y divide-gray-100">
+            {/* Phase labels */}
+            <div className="px-4 py-3 grid grid-cols-4 gap-3 text-[11px]">
+              <div>
+                <div className="font-bold text-gray-500 mb-0.5">Apr 02–14 · Baseline</div>
+                <div className="text-gray-400">Avg score 8 · 0–1 flags/day · normal operations across all channels</div>
+              </div>
+              <div>
+                <div className="font-bold text-amber-600 mb-0.5">Apr 15–20 · First Signals</div>
+                <div className="text-gray-400">Score 14–21 · isolated blips; Email NLP + Velocity agents raised low-priority alerts</div>
+              </div>
+              <div>
+                <div className="font-bold text-orange-600 mb-0.5">Apr 21–30 · Escalation</div>
+                <div className="text-gray-400">Score 23→69 · 10-day trend crossing warning threshold (40) on Apr 25; 5–8 flags/day</div>
+              </div>
+              <div className="flex flex-col">
+                <div className="font-bold text-red-600 mb-0.5">May 01 · Critical Spike</div>
+                <div className="text-gray-400 mb-2">Score 89 · 13 flags · 3 high-value cases escalated</div>
+                <div className="flex flex-wrap gap-1 mt-auto">
+                  {[
+                    { id: 'TR-8842', label: '$14.5M BEC wire',    color: 'bg-red-50 text-red-700 border-red-200'    },
+                    { id: 'CU-4419', label: 'MT542 custody',      color: 'bg-orange-50 text-orange-700 border-orange-200' },
+                    { id: 'PR-9102', label: 'Synthetic ID ring',  color: 'bg-orange-50 text-orange-700 border-orange-200' },
+                  ].map(c => (
+                    <span key={c.id} className={clsx('text-[10px] font-bold px-1.5 py-0.5 rounded-md border', c.color)}>
+                      {c.id}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-5 gap-4">
