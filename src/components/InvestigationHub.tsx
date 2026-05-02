@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Mail, CreditCard, Fingerprint, Network, ShieldCheck, Cpu,
   AlertTriangle, Globe, MapPin, Monitor, UserX, Zap, Activity,
-  Lock, Clock, Hash, ArrowUpRight, ChevronLeft,
+  Lock, Clock, Hash, ArrowUpRight,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { BEC_CASES } from '../data/becCases'
@@ -11,27 +11,27 @@ import type { BECCase } from '../types'
 // ── Agent registry ────────────────────────────────────────────────────────────
 
 const AGENTS = [
-  { id: 'email'     as const, name: 'Email Screener',     model: 'NLP / Transformer', icon: Mail,       accent: { dot: 'bg-sky-400',     text: 'text-sky-300',     border: 'border-sky-500/40',     bar: 'bg-sky-500'     } },
-  { id: 'payment'   as const, name: 'Payment Anomaly',    model: 'XGBoost Ensemble',  icon: CreditCard,  accent: { dot: 'bg-violet-400',  text: 'text-violet-300',  border: 'border-violet-500/40',  bar: 'bg-violet-500'  } },
-  { id: 'identity'  as const, name: 'Identity & Session', model: 'Isolation Forest',  icon: Fingerprint, accent: { dot: 'bg-amber-400',   text: 'text-amber-300',   border: 'border-amber-500/40',   bar: 'bg-amber-500'   } },
-  { id: 'graph'     as const, name: 'Relationship Graph', model: 'Graph Neural Net',  icon: Network,     accent: { dot: 'bg-emerald-400', text: 'text-emerald-300', border: 'border-emerald-500/40', bar: 'bg-emerald-500' } },
-  { id: 'intel'     as const, name: 'Counterparty Intel', model: 'Rules + BERT',      icon: ShieldCheck, accent: { dot: 'bg-rose-400',    text: 'text-rose-300',    border: 'border-rose-500/40',    bar: 'bg-rose-500'    } },
+  { id: 'email'     as const, name: 'Email Screener',     model: 'NLP / Transformer', icon: Mail,       accent: { dot: 'bg-sky-500',     text: 'text-sky-600',     border: 'border-sky-400/60',     bar: 'bg-sky-500'     } },
+  { id: 'payment'   as const, name: 'Payment Anomaly',    model: 'XGBoost Ensemble',  icon: CreditCard,  accent: { dot: 'bg-violet-500',  text: 'text-violet-600',  border: 'border-violet-400/60',  bar: 'bg-violet-500'  } },
+  { id: 'identity'  as const, name: 'Identity & Session', model: 'Isolation Forest',  icon: Fingerprint, accent: { dot: 'bg-amber-500',   text: 'text-amber-600',   border: 'border-amber-400/60',   bar: 'bg-amber-500'   } },
+  { id: 'graph'     as const, name: 'Relationship Graph', model: 'Graph Neural Net',  icon: Network,     accent: { dot: 'bg-emerald-500', text: 'text-emerald-600', border: 'border-emerald-400/60', bar: 'bg-emerald-500' } },
+  { id: 'intel'     as const, name: 'Counterparty Intel', model: 'Rules + BERT',      icon: ShieldCheck, accent: { dot: 'bg-rose-500',    text: 'text-rose-600',    border: 'border-rose-400/60',    bar: 'bg-rose-500'    } },
 ]
 type AgentId = typeof AGENTS[number]['id']
 
-// ── Risk entity colours (dark mode) ──────────────────────────────────────────
+// ── Risk entity colours (light mode) ─────────────────────────────────────────
 
 const ENTITY_RISK: Record<string, string> = {
-  deadline:    'bg-red-900/70 text-red-200 border border-red-600/60 ring-1 ring-red-500/40',
-  amount:      'bg-orange-900/70 text-orange-200 border border-orange-600/60 ring-1 ring-orange-500/40',
-  account:     'bg-violet-900/70 text-violet-200 border border-violet-600/60 ring-1 ring-violet-500/40',
-  institution: 'bg-blue-900/60 text-blue-200 border border-blue-600/50',
-  person:      'bg-slate-700/60 text-slate-200 border border-slate-500/50',
-  location:    'bg-teal-900/60 text-teal-200 border border-teal-600/50',
+  deadline:    'bg-red-100 text-red-700 border border-red-300 ring-1 ring-red-200',
+  amount:      'bg-orange-100 text-orange-700 border border-orange-300 ring-1 ring-orange-200',
+  account:     'bg-violet-100 text-violet-700 border border-violet-300 ring-1 ring-violet-200',
+  institution: 'bg-blue-50 text-blue-700 border border-blue-200',
+  person:      'bg-gray-100 text-gray-700 border border-gray-300',
+  location:    'bg-teal-50 text-teal-700 border border-teal-200',
 }
 const ENTITY_DIM: Record<string, string> = {
-  deadline: 'text-slate-500', amount: 'text-slate-500', account: 'text-slate-500',
-  institution: 'text-slate-500', person: 'text-slate-500', location: 'text-slate-500',
+  deadline: 'text-gray-400', amount: 'text-gray-400', account: 'text-gray-400',
+  institution: 'text-gray-400', person: 'text-gray-400', location: 'text-gray-400',
 }
 
 const ENTITY_ACTIVATIONS: Partial<Record<AgentId, Partial<Record<number, string[]>>>> = {
@@ -48,9 +48,9 @@ interface SCard {
   label: string; value: string; detail: string; sev: 'critical' | 'high' | 'medium'
 }
 const SEV_CARD: Record<SCard['sev'], { border: string; bg: string; icon: string; dot: string; val: string }> = {
-  critical: { border: 'border-red-600/50',    bg: 'bg-red-950/60',    icon: 'text-red-400',    dot: 'bg-red-500',    val: 'text-red-200'    },
-  high:     { border: 'border-orange-600/50', bg: 'bg-orange-950/60', icon: 'text-orange-400', dot: 'bg-orange-500', val: 'text-orange-200' },
-  medium:   { border: 'border-amber-600/50',  bg: 'bg-amber-950/60',  icon: 'text-amber-400',  dot: 'bg-amber-500',  val: 'text-amber-200'  },
+  critical: { border: 'border-red-300',    bg: 'bg-red-50',    icon: 'text-red-500',    dot: 'bg-red-500',    val: 'text-red-700'    },
+  high:     { border: 'border-orange-300', bg: 'bg-orange-50', icon: 'text-orange-500', dot: 'bg-orange-500', val: 'text-orange-700' },
+  medium:   { border: 'border-amber-300',  bg: 'bg-amber-50',  icon: 'text-amber-500',  dot: 'bg-amber-500',  val: 'text-amber-700'  },
 }
 
 function buildSignalCards(c: BECCase): SCard[] {
@@ -110,23 +110,23 @@ function computeAgentData(c: BECCase): Record<AgentId, { score: number; lines: s
 type ALvl = 'critical' | 'high' | 'medium' | 'ok' | undefined
 
 function ARow({ label, value, lvl, mono }: { label: string; value: string; lvl?: ALvl; mono?: boolean }) {
-  const vc = lvl === 'critical' ? 'text-red-300 bg-red-950/60 px-1 rounded border border-red-700/40 font-bold'
-    : lvl === 'high'   ? 'text-orange-300 bg-orange-950/50 px-1 rounded border border-orange-700/30'
-    : lvl === 'medium' ? 'text-amber-300 bg-amber-950/40 px-1 rounded'
-    : lvl === 'ok'     ? 'text-emerald-400'
-    : 'text-slate-300'
+  const vc = lvl === 'critical' ? 'text-red-700 bg-red-50 px-1 rounded border border-red-200 font-bold'
+    : lvl === 'high'   ? 'text-orange-700 bg-orange-50 px-1 rounded border border-orange-200'
+    : lvl === 'medium' ? 'text-amber-700 bg-amber-50 px-1 rounded'
+    : lvl === 'ok'     ? 'text-emerald-600'
+    : 'text-gray-800'
   return (
-    <div className="flex items-start gap-2 py-1.5 border-b border-slate-800/40 last:border-0">
-      <span className="text-[10px] text-slate-500 shrink-0 w-[4.5rem] leading-relaxed">{label}</span>
+    <div className="flex items-start gap-2 py-1.5 border-b border-gray-100 last:border-0">
+      <span className="text-[10px] text-gray-400 shrink-0 w-[4.5rem] leading-relaxed">{label}</span>
       <span className={clsx('text-[10px] flex-1 text-right leading-relaxed break-words', mono && 'font-mono', vc)}>{value}</span>
     </div>
   )
 }
 function ASec({ title }: { title: string }) {
-  return <div className="text-[9px] font-bold text-slate-600 uppercase tracking-widest px-3 pt-3 pb-1.5 bg-slate-950/40">{title}</div>
+  return <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-3 pt-3 pb-1.5 bg-gray-50">{title}</div>
 }
 
-// ── Per-agent detail views (shown in left panel on agent click) ───────────────
+// ── Per-agent detail views ────────────────────────────────────────────────────
 
 function EmailDetail({ c }: { c: BECCase }) {
   const { email: e, nlpAnalysis: n, externalIntel: ei } = c
@@ -153,7 +153,7 @@ function EmailDetail({ c }: { c: BECCase }) {
           <ASec title="Top Urgency Phrases" />
           <div className="px-3 space-y-1 pb-2">
             {n.urgencyPhrases.slice(0,3).map((p,i) => (
-              <div key={i} className="text-[10px] font-mono text-red-300 bg-red-950/40 px-2 py-1 rounded border border-red-800/40 leading-relaxed">"{p}"</div>
+              <div key={i} className="text-[10px] font-mono text-red-700 bg-red-50 px-2 py-1 rounded border border-red-200 leading-relaxed">"{p}"</div>
             ))}
           </div>
         </>
@@ -163,7 +163,7 @@ function EmailDetail({ c }: { c: BECCase }) {
           <ASec title="Override Requests" />
           <div className="px-3 space-y-1 pb-2">
             {n.overridePhrases.slice(0,2).map((p,i) => (
-              <div key={i} className="text-[10px] font-mono text-amber-300 bg-amber-950/40 px-2 py-1 rounded border border-amber-800/40 leading-relaxed">"{p}"</div>
+              <div key={i} className="text-[10px] font-mono text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-200 leading-relaxed">"{p}"</div>
             ))}
           </div>
         </>
@@ -335,24 +335,24 @@ function IntelDetail({ c }: { c: BECCase }) {
   )
 }
 
-// ── Agent detail panel (replaces case list when agent clicked) ────────────────
+// ── Agent detail panel (shown in middle column when agent clicked) ─────────────
 
-function AgentDetailPanel({ agentId, c, onBack }: { agentId: AgentId; c: BECCase; onBack: () => void }) {
+function AgentDetailPane({ agentId, c }: { agentId: AgentId; c: BECCase }) {
   const def = AGENTS.find(a => a.id === agentId)!
   const Icon = def.icon
   return (
-    <div className="w-52 shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col overflow-hidden">
-      <div className="px-3 py-2.5 border-b border-slate-800 flex items-center gap-2 shrink-0">
-        <button onClick={onBack} className="p-0.5 rounded hover:bg-slate-700 transition-colors shrink-0">
-          <ChevronLeft className="w-3.5 h-3.5 text-slate-400" />
-        </button>
+    <div className="flex flex-col h-full overflow-hidden">
+      <div className={clsx('px-3 py-2.5 border-b border-gray-200 flex items-center gap-2 shrink-0 bg-gray-50')}>
         <Icon className={clsx('w-3.5 h-3.5 shrink-0', def.accent.text)} />
         <div className="flex-1 min-w-0">
           <div className={clsx('text-[10px] font-bold uppercase tracking-wider truncate', def.accent.text)}>{def.name}</div>
-          <div className="text-[9px] text-slate-600">{def.model}</div>
+          <div className="text-[9px] text-gray-400">{def.model} · findings</div>
         </div>
+        <span className={clsx('text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide', def.accent.text, def.accent.border, 'bg-white')}>
+          active
+        </span>
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto bg-white">
         {agentId === 'email'    && <EmailDetail    c={c} />}
         {agentId === 'payment'  && <PaymentDetail  c={c} />}
         {agentId === 'identity' && <IdentityDetail c={c} />}
@@ -373,36 +373,36 @@ function EmailPanel({ c, activeEntities, activePhrases }: {
   const { email: e, externalIntel: ei } = c
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="px-4 py-2.5 border-b border-slate-800 bg-slate-900 shrink-0">
+      <div className="px-4 py-2.5 border-b border-gray-200 bg-gray-50 shrink-0">
         <div className="flex items-start gap-2.5">
-          <Mail className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+          <Mail className="w-3.5 h-3.5 text-gray-400 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-bold text-slate-100 truncate mb-0.5">{e.subject}</div>
+            <div className="text-xs font-bold text-gray-900 truncate mb-0.5">{e.subject}</div>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[11px] text-slate-400">From <span className={clsx('font-mono', ei.emailDomainIsLookalike ? 'text-red-400' : 'text-slate-300')}>{e.senderAddress}</span></span>
-              <span className="text-[11px] text-slate-500">{e.receivedAt}</span>
-              {ei.emailDomainIsLookalike && <span className="text-[10px] bg-red-900/50 text-red-300 border border-red-700/50 px-1.5 py-0.5 rounded font-mono">↔ {ei.lookalikeDomain}</span>}
-              {e.senderDomainAgeDays < 90 && <span className="text-[10px] bg-orange-900/50 text-orange-300 border border-orange-700/50 px-1.5 py-0.5 rounded">{e.senderDomainAgeDays}d old</span>}
+              <span className="text-[11px] text-gray-500">From <span className={clsx('font-mono', ei.emailDomainIsLookalike ? 'text-red-600' : 'text-gray-700')}>{e.senderAddress}</span></span>
+              <span className="text-[11px] text-gray-400">{e.receivedAt}</span>
+              {ei.emailDomainIsLookalike && <span className="text-[10px] bg-red-50 text-red-700 border border-red-300 px-1.5 py-0.5 rounded font-mono">↔ {ei.lookalikeDomain}</span>}
+              {e.senderDomainAgeDays < 90 && <span className="text-[10px] bg-orange-50 text-orange-700 border border-orange-300 px-1.5 py-0.5 rounded">{e.senderDomainAgeDays}d old</span>}
             </div>
           </div>
         </div>
       </div>
-      <div className="flex-1 overflow-y-auto px-4 py-3 text-xs leading-relaxed font-mono whitespace-pre-wrap">
+      <div className="flex-1 overflow-y-auto px-4 py-3 text-xs leading-relaxed font-mono whitespace-pre-wrap bg-white">
         {e.bodySegments.map((seg, i) => {
-          if (!seg.entityType) return <span key={i} className="text-slate-400">{seg.text}</span>
+          if (!seg.entityType) return <span key={i} className="text-gray-700">{seg.text}</span>
           const active = activeEntities.has(seg.entityType)
-          return <span key={i} title={seg.entityType} className={clsx('rounded px-0.5 cursor-default transition-all duration-500', active ? ENTITY_RISK[seg.entityType] : ENTITY_DIM[seg.entityType] ?? 'text-slate-500')}>{seg.text}</span>
+          return <span key={i} title={seg.entityType} className={clsx('rounded px-0.5 cursor-default transition-all duration-500', active ? ENTITY_RISK[seg.entityType] : ENTITY_DIM[seg.entityType] ?? 'text-gray-400')}>{seg.text}</span>
         })}
       </div>
       {activePhrases.length > 0 && (
-        <div className="px-3 py-2 border-t border-slate-800 bg-slate-900/80 shrink-0">
-          <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Email agent — detected signals</div>
+        <div className="px-3 py-2 border-t border-gray-200 bg-gray-50 shrink-0">
+          <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Email agent — detected signals</div>
           <div className="flex flex-wrap gap-1.5">
             {activePhrases.map((p, i) => (
               <span key={i} className={clsx('text-[10px] font-mono px-2 py-0.5 rounded border',
-                p.type === 'urgency' ? 'bg-red-900/50 text-red-300 border-red-700/50' :
-                p.type === 'secrecy' ? 'bg-purple-900/50 text-purple-300 border-purple-700/50' :
-                'bg-amber-900/50 text-amber-300 border-amber-700/50'
+                p.type === 'urgency' ? 'bg-red-50 text-red-700 border-red-300' :
+                p.type === 'secrecy' ? 'bg-purple-50 text-purple-700 border-purple-300' :
+                'bg-amber-50 text-amber-700 border-amber-300'
               )}>
                 {p.type === 'urgency' ? '⚡' : p.type === 'secrecy' ? '🔒' : '⚠'} {p.text.length > 35 ? p.text.slice(0, 35) + '…' : p.text}
               </span>
@@ -420,13 +420,13 @@ function SignalCard({ card, active }: { card: SCard; active: boolean }) {
   const s = SEV_CARD[card.sev]
   const Icon = card.Icon
   return (
-    <div className={clsx('rounded-xl border p-3 transition-all duration-500', active ? clsx(s.border, s.bg) : 'border-slate-800 bg-slate-900/30 opacity-30')}>
+    <div className={clsx('rounded-xl border p-3 transition-all duration-500', active ? clsx(s.border, s.bg) : 'border-gray-200 bg-gray-50 opacity-40')}>
       <div className="flex items-start gap-2">
-        <Icon className={clsx('w-3.5 h-3.5 shrink-0 mt-0.5', active ? s.icon : 'text-slate-600')} />
+        <Icon className={clsx('w-3.5 h-3.5 shrink-0 mt-0.5', active ? s.icon : 'text-gray-300')} />
         <div className="flex-1 min-w-0">
-          <div className={clsx('text-[10px] font-bold uppercase tracking-wider mb-0.5', active ? s.icon : 'text-slate-600')}>{card.label}</div>
-          <div className={clsx('text-xs font-semibold truncate', active ? s.val : 'text-slate-600')}>{card.value}</div>
-          <div className="text-[10px] text-slate-500 truncate mt-0.5">{card.detail}</div>
+          <div className={clsx('text-[10px] font-bold uppercase tracking-wider mb-0.5', active ? s.icon : 'text-gray-300')}>{card.label}</div>
+          <div className={clsx('text-xs font-semibold truncate', active ? s.val : 'text-gray-300')}>{card.value}</div>
+          <div className="text-[10px] text-gray-400 truncate mt-0.5">{card.detail}</div>
         </div>
         {active && <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0 mt-1', s.dot)} />}
       </div>
@@ -455,28 +455,28 @@ function AgentRow({ def, lines, score, isSelected, onClick }: {
       className={clsx(
         'w-full text-left rounded-xl border px-3 py-2.5 transition-all duration-200 cursor-pointer',
         isSelected
-          ? clsx(accent.border, 'bg-slate-800 ring-1', accent.border.replace('border-', 'ring-'))
-          : done ? clsx(accent.border, 'bg-slate-900 hover:bg-slate-800')
-          : running ? 'border-slate-700 bg-slate-900 hover:bg-slate-800'
-          : 'border-slate-800/50 bg-slate-900/30 opacity-40 pointer-events-none'
+          ? clsx(accent.border, 'bg-blue-50 ring-1', accent.border.replace('border-', 'ring-'))
+          : done ? clsx(accent.border, 'bg-white hover:bg-gray-50 shadow-sm')
+          : running ? 'border-gray-300 bg-white hover:bg-gray-50'
+          : 'border-gray-100 bg-gray-50 opacity-40 pointer-events-none'
       )}
     >
       <div className="flex items-center gap-2 mb-1.5">
-        <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', done ? accent.dot : running ? clsx(accent.dot, 'animate-pulse') : 'bg-slate-700')} />
+        <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', done ? accent.dot : running ? clsx(accent.dot, 'animate-pulse') : 'bg-gray-300')} />
         <Icon className={clsx('w-3 h-3 shrink-0', accent.text)} />
         <span className={clsx('text-[11px] font-bold flex-1 truncate', accent.text)}>{def.name}</span>
         {done && <span className={clsx('text-sm font-bold font-mono shrink-0', accent.text)}>{pct}</span>}
-        {running && <span className="text-[9px] text-slate-500 font-mono animate-pulse">ANALYZING</span>}
+        {running && <span className="text-[9px] text-gray-400 font-mono animate-pulse">ANALYZING</span>}
       </div>
       <div className="pl-5 mb-1.5 min-h-[2rem]">
-        <div className="text-[10px] font-mono text-slate-500 leading-relaxed line-clamp-2">{lines[lines.length - 1] ?? ''}</div>
+        <div className="text-[10px] font-mono text-gray-400 leading-relaxed line-clamp-2">{lines[lines.length - 1] ?? ''}</div>
       </div>
       {done && (
         <div className="pl-5 flex items-center gap-1.5">
-          <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+          <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
             <div className={clsx('h-1 rounded-full transition-all duration-700', accent.bar)} style={{ width: `${pct}%` }} />
           </div>
-          <span className="text-[9px] text-slate-500 font-mono shrink-0">{pct}/100</span>
+          <span className="text-[9px] text-gray-400 font-mono shrink-0">{pct}/100</span>
           {isSelected && <span className={clsx('text-[9px] shrink-0 font-bold ml-1', accent.text)}>← viewing</span>}
         </div>
       )}
@@ -509,24 +509,24 @@ function EnsembleScore({ c, agentData, visible }: {
   if (!visible) return null
 
   const t = c.anomalyScore
-  const col = t>=80?{stroke:'#ef4444',text:'text-red-400',label:'CRITICAL',badge:'bg-red-950 text-red-300 border-red-700/50'}
-    :t>=65?{stroke:'#f97316',text:'text-orange-400',label:'HIGH',badge:'bg-orange-950 text-orange-300 border-orange-700/50'}
-    :t>=45?{stroke:'#f59e0b',text:'text-amber-400',label:'MEDIUM',badge:'bg-amber-950 text-amber-300 border-amber-700/50'}
-    :{stroke:'#10b981',text:'text-emerald-400',label:'LOW',badge:'bg-emerald-950 text-emerald-300 border-emerald-700/50'}
+  const col = t>=80?{stroke:'#ef4444',text:'text-red-600',label:'CRITICAL',badge:'bg-red-50 text-red-700 border-red-300'}
+    :t>=65?{stroke:'#f97316',text:'text-orange-600',label:'HIGH',badge:'bg-orange-50 text-orange-700 border-orange-300'}
+    :t>=45?{stroke:'#f59e0b',text:'text-amber-600',label:'MEDIUM',badge:'bg-amber-50 text-amber-700 border-amber-300'}
+    :{stroke:'#10b981',text:'text-emerald-600',label:'LOW',badge:'bg-emerald-50 text-emerald-700 border-emerald-300'}
 
   const r=38,cx=46,cy=46,circ=2*Math.PI*r,dash=circ*(1-disp/100)
   return (
-    <div className="border-t border-slate-800 bg-slate-900/80 p-3">
-      <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-1">Orchestrator — Ensemble Score</div>
+    <div className="border-t border-gray-200 bg-gray-50 p-3">
+      <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2 px-1">Orchestrator — Ensemble Score</div>
       <div className="flex items-center gap-3 mb-3">
         <svg width="92" height="92" viewBox="0 0 92 92" className="shrink-0">
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1e293b" strokeWidth="10" />
+          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e2e8f0" strokeWidth="10" />
           <circle cx={cx} cy={cy} r={r} fill="none" stroke={col.stroke} strokeWidth="10"
             strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dash}
             transform={`rotate(-90 ${cx} ${cy})`}
             style={{ transition:'stroke-dashoffset 1.1s cubic-bezier(0.34,1.2,0.64,1)' }} />
           <text x={cx} y={cy-4} textAnchor="middle" fill={col.stroke} fontSize="18" fontWeight="800" fontFamily="ui-monospace,monospace">{disp.toFixed(0)}</text>
-          <text x={cx} y={cy+13} textAnchor="middle" fill="#475569" fontSize="9" fontFamily="ui-monospace,monospace">/100</text>
+          <text x={cx} y={cy+13} textAnchor="middle" fill="#94a3b8" fontSize="9" fontFamily="ui-monospace,monospace">/100</text>
         </svg>
         <div className="flex-1 space-y-1.5">
           {AGENTS.map(def => {
@@ -534,7 +534,7 @@ function EnsembleScore({ c, agentData, visible }: {
             return (
               <div key={def.id} className="flex items-center gap-1.5">
                 <span className={clsx('text-[9px] font-bold w-16 shrink-0 truncate', def.accent.text)}>{def.name.split(' ')[0]}</span>
-                <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
+                <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
                   <div className={clsx('h-1 rounded-full', def.accent.bar)} style={{ width:`${pct}%` }} />
                 </div>
                 <span className={clsx('text-[9px] font-mono w-5 text-right shrink-0', def.accent.text)}>{pct}</span>
@@ -545,7 +545,7 @@ function EnsembleScore({ c, agentData, visible }: {
       </div>
       <div className="flex items-center gap-2">
         <span className={clsx('text-[10px] font-bold border rounded-full px-2.5 py-1 uppercase tracking-widest', col.badge)}>{col.label} RISK</span>
-        <span className="text-[10px] text-slate-500 font-mono ml-auto">{c.status.toUpperCase()}</span>
+        <span className="text-[10px] text-gray-400 font-mono ml-auto">{c.status.toUpperCase()}</span>
       </div>
     </div>
   )
@@ -555,16 +555,16 @@ function EnsembleScore({ c, agentData, visible }: {
 
 function CaseRow({ c, selected, onSelect }: { c: BECCase; selected: boolean; onSelect: () => void }) {
   const dot = c.severity==='critical'?'bg-red-500':c.severity==='high'?'bg-orange-500':'bg-amber-400'
-  const txt = c.severity==='critical'?'text-red-400':c.severity==='high'?'text-orange-400':'text-amber-400'
+  const txt = c.severity==='critical'?'text-red-600':c.severity==='high'?'text-orange-600':'text-amber-600'
   return (
-    <button onClick={onSelect} className={clsx('w-full text-left px-4 py-3 border-b border-slate-800/80 transition-all', selected?'bg-slate-800 border-l-2 border-l-sky-500':'hover:bg-slate-800/50')}>
+    <button onClick={onSelect} className={clsx('w-full text-left px-4 py-3 border-b border-gray-100 transition-all', selected?'bg-blue-50 border-l-2 border-l-blue-500':'hover:bg-gray-50')}>
       <div className="flex items-center gap-2 mb-1">
         <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', dot)} />
-        <span className="font-mono text-[10px] text-slate-400 flex-1 truncate">{c.id}</span>
+        <span className="font-mono text-[10px] text-gray-500 flex-1 truncate">{c.id}</span>
         <span className={clsx('text-[9px] font-bold uppercase', txt)}>{c.severity}</span>
       </div>
-      <div className="text-xs font-semibold text-slate-200 truncate pl-3.5">{c.relationship.clientName}</div>
-      <div className="text-[11px] text-slate-500 truncate pl-3.5">{c.instruction.currency} {c.instruction.amount.toLocaleString()} · {c.instruction.beneficiaryCountry}</div>
+      <div className="text-xs font-semibold text-gray-800 truncate pl-3.5">{c.relationship.clientName}</div>
+      <div className="text-[11px] text-gray-400 truncate pl-3.5">{c.instruction.currency} {c.instruction.amount.toLocaleString()} · {c.instruction.beneficiaryCountry}</div>
     </button>
   )
 }
@@ -616,42 +616,53 @@ function DetectionLayout({ c, selectedAgent, onAgentClick }: {
 
   return (
     <>
-      {/* Middle panel */}
-      <div className="flex-1 flex flex-col min-w-0 border-x border-slate-800 overflow-hidden">
-        <div className="flex items-center gap-2 px-4 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
-          <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', c.severity==='critical'?'bg-red-500':c.severity==='high'?'bg-orange-500':'bg-amber-400')} />
-          <span className="font-mono text-[10px] text-slate-400">{c.id}</span>
-          <span className="text-xs font-bold text-slate-200">{c.relationship.clientName}</span>
-          <span className="text-slate-600">·</span>
-          <span className="text-[11px] text-slate-400">{c.email.receivedAt}</span>
-        </div>
-        <div className="flex-1 overflow-hidden min-h-0">
-          <EmailPanel c={c} activeEntities={activeEnts} activePhrases={phrases} />
-        </div>
-        <div className="h-56 shrink-0 border-t border-slate-800 overflow-y-auto">
-          <div className="px-3 pt-2 pb-1 border-b border-slate-800/60 flex items-center gap-2">
-            <Activity className="w-3 h-3 text-slate-500" />
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Risk signals — activated by agents in real time</span>
-          </div>
-          <div className="p-3 grid grid-cols-2 gap-2">
-            {signalCards.map(card => <SignalCard key={card.id} card={card} active={activeCards.has(card.id)} />)}
-          </div>
-        </div>
-      </div>
+      {/* Middle panel — splits when an agent is selected */}
+      <div className="flex-1 flex min-w-0 border-r border-gray-200 overflow-hidden">
 
-      {/* Right panel */}
-      <div className="w-72 shrink-0 flex flex-col overflow-hidden border-l border-slate-800">
-        {orchLine && (
-          <div className="px-3 py-2 border-b border-slate-800 bg-slate-900 shrink-0">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Cpu className="w-3 h-3 text-emerald-500" />
-              <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest">Orchestrator</span>
+        {/* Email + signal cards — shrinks when agent detail is open */}
+        <div className={clsx('flex flex-col overflow-hidden transition-all duration-300', selectedAgent ? 'w-[52%]' : 'flex-1')}>
+          <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-200 shrink-0">
+            <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', c.severity==='critical'?'bg-red-500':c.severity==='high'?'bg-orange-500':'bg-amber-400')} />
+            <span className="font-mono text-[10px] text-gray-400">{c.id}</span>
+            <span className="text-xs font-bold text-gray-800">{c.relationship.clientName}</span>
+            <span className="text-gray-300">·</span>
+            <span className="text-[11px] text-gray-400">{c.email.receivedAt}</span>
+          </div>
+          <div className="flex-1 overflow-hidden min-h-0">
+            <EmailPanel c={c} activeEntities={activeEnts} activePhrases={phrases} />
+          </div>
+          <div className={clsx('shrink-0 border-t border-gray-200 overflow-y-auto transition-all duration-300', selectedAgent ? 'h-40' : 'h-56')}>
+            <div className="px-3 pt-2 pb-1 border-b border-gray-100 flex items-center gap-2 bg-gray-50">
+              <Activity className="w-3 h-3 text-gray-400" />
+              <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Risk signals — activated by agents in real time</span>
             </div>
-            <div className="text-[10px] font-mono text-slate-400 leading-relaxed pl-4">{orchLine}</div>
+            <div className="p-3 grid grid-cols-2 gap-2">
+              {signalCards.map(card => <SignalCard key={card.id} card={card} active={activeCards.has(card.id)} />)}
+            </div>
+          </div>
+        </div>
+
+        {/* Agent detail — slides in alongside email */}
+        {selectedAgent && (
+          <div className="flex-1 border-l border-gray-200 overflow-hidden">
+            <AgentDetailPane agentId={selectedAgent} c={c} />
           </div>
         )}
-        <div className="px-3 pt-1.5 pb-1 border-b border-slate-800/60">
-          <span className="text-[9px] text-slate-600">Click an agent to view its data in the left panel</span>
+      </div>
+
+      {/* Right panel — agents + ensemble */}
+      <div className="w-72 shrink-0 flex flex-col overflow-hidden bg-white border-l border-gray-200">
+        {orchLine && (
+          <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 shrink-0">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Cpu className="w-3 h-3 text-emerald-600" />
+              <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest">Orchestrator</span>
+            </div>
+            <div className="text-[10px] font-mono text-gray-500 leading-relaxed pl-4">{orchLine}</div>
+          </div>
+        )}
+        <div className="px-3 pt-1.5 pb-1 border-b border-gray-100">
+          <span className="text-[9px] text-gray-400">Click an agent to view its findings alongside the email</span>
         </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {AGENTS.map(def => (
@@ -674,44 +685,40 @@ function DetectionLayout({ c, selectedAgent, onAgentClick }: {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function InvestigationHub() {
-  const [selected,  setSelected]  = useState<BECCase | null>(null)
-  const [leftView,  setLeftView]  = useState<'cases' | AgentId>('cases')
+  const [selected,       setSelected]       = useState<BECCase | null>(null)
+  const [selectedAgent,  setSelectedAgent]  = useState<AgentId | null>(null)
 
-  const handleSelect = (c: BECCase) => { setSelected(c); setLeftView('cases') }
+  const handleSelect = (c: BECCase) => { setSelected(c); setSelectedAgent(null) }
 
   return (
-    <div className="flex-1 flex overflow-hidden bg-slate-950">
+    <div className="flex-1 flex overflow-hidden bg-gray-50">
 
-      {/* Left panel — case list OR agent detail */}
-      {leftView === 'cases' || !selected ? (
-        <div className="w-52 shrink-0 bg-slate-900 border-r border-slate-800 overflow-y-auto flex flex-col">
-          <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2 shrink-0">
-            <Cpu className="w-3.5 h-3.5 text-sky-400" />
-            <span className="text-xs font-bold text-slate-200 uppercase tracking-widest">Investigations</span>
-          </div>
-          {BEC_CASES.map(c => (
-            <CaseRow key={c.id} c={c} selected={selected?.id===c.id} onSelect={() => handleSelect(c)} />
-          ))}
+      {/* Left panel — case list, always visible */}
+      <div className="w-48 shrink-0 bg-white border-r border-gray-200 overflow-y-auto flex flex-col">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center gap-2 shrink-0 bg-gray-50">
+          <Cpu className="w-3.5 h-3.5 text-blue-500" />
+          <span className="text-xs font-bold text-gray-700 uppercase tracking-widest">Investigations</span>
         </div>
-      ) : (
-        <AgentDetailPanel agentId={leftView} c={selected} onBack={() => setLeftView('cases')} />
-      )}
+        {BEC_CASES.map(c => (
+          <CaseRow key={c.id} c={c} selected={selected?.id===c.id} onSelect={() => handleSelect(c)} />
+        ))}
+      </div>
 
       {/* Middle + right */}
       {selected ? (
         <DetectionLayout
           key={selected.id}
           c={selected}
-          selectedAgent={leftView !== 'cases' ? leftView : null}
-          onAgentClick={(id) => setLeftView(prev => prev === id ? 'cases' : id)}
+          selectedAgent={selectedAgent}
+          onAgentClick={(id) => setSelectedAgent(prev => prev === id ? null : id)}
         />
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
-          <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center">
-            <Cpu className="w-7 h-7 text-slate-700" />
+          <div className="w-14 h-14 rounded-2xl bg-white border border-gray-200 shadow-sm flex items-center justify-center">
+            <Cpu className="w-7 h-7 text-gray-300" />
           </div>
-          <div className="text-sm font-semibold text-slate-500">Select a case to begin</div>
-          <div className="text-xs text-slate-600 max-w-xs">5 specialist agents analyse email, payment, identity, relationship graph and external intel in real time</div>
+          <div className="text-sm font-semibold text-gray-500">Select a case to begin</div>
+          <div className="text-xs text-gray-400 max-w-xs">5 specialist agents analyse email, payment, identity, relationship graph and external intel in real time</div>
         </div>
       )}
     </div>

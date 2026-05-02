@@ -17,7 +17,7 @@ interface Props {
 
 export function NavSidebar({ section, onSelect }: Props) {
   return (
-    <nav className="w-14 bg-slate-900 border-r border-slate-800 flex flex-col items-center py-3 gap-1 shrink-0">
+    <nav className="w-14 bg-white border-r border-gray-200 flex flex-col items-center py-3 gap-1 shrink-0">
       {NAV_ITEMS.map(({ id, icon: Icon, label }) => (
         <div key={id} className="relative group">
           <button
@@ -26,7 +26,7 @@ export function NavSidebar({ section, onSelect }: Props) {
               'flex items-center justify-center w-10 h-10 rounded-lg transition-all',
               section === id
                 ? 'bg-blue-600 text-white'
-                : 'text-slate-500 hover:text-slate-200 hover:bg-slate-800'
+                : 'text-gray-400 hover:text-gray-700 hover:bg-gray-100'
             )}
             aria-label={label}
           >
@@ -35,7 +35,7 @@ export function NavSidebar({ section, onSelect }: Props) {
 
           {/* Tooltip */}
           <div className="pointer-events-none absolute left-12 top-1/2 -translate-y-1/2 z-50 opacity-0 group-hover:opacity-100 transition-opacity">
-            <div className="bg-slate-800 text-slate-200 text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-xl border border-slate-700">
+            <div className="bg-gray-900 text-white text-xs font-medium px-2.5 py-1.5 rounded-lg whitespace-nowrap shadow-xl border border-gray-700">
               {label}
             </div>
           </div>
