@@ -132,3 +132,108 @@ export interface Agent {
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 export type Section = 'overview' | 'explorer' | 'investigations' | 'agents' | 'rules'
+
+// ── BEC Cases (Data Explorer) ─────────────────────────────────────────────────
+
+export interface BECEmailSegment {
+  text: string
+  flagged?: boolean
+  flagReason?: string
+}
+
+export interface BECEmail {
+  id: string
+  receivedAt: string
+  senderName: string
+  senderAddress: string
+  senderDomainAgeDays: number
+  legitimateDomain: string
+  replyToAddress: string | null
+  subject: string
+  bodySegments: BECEmailSegment[]
+  dkim: 'pass' | 'fail'
+  spf: 'pass' | 'fail'
+  dmarc: 'pass' | 'fail'
+  originatingIP: string
+  ipFlagged: boolean
+  urgencyScore: number
+  authorityScore: number
+  overrideLanguageDetected: boolean
+  isFirstContact: boolean
+  attachments: string[]
+}
+
+export interface BECInstruction {
+  instructionId: string
+  channel: 'SWIFT' | 'Fedwire' | 'Internal'
+  submittedAt: string
+  submittedOutsideHours: boolean
+  beneficiaryName: string
+  beneficiaryAccount: string
+  beneficiaryBank: string
+  beneficiaryCountry: string
+  beneficiaryIsNew: boolean
+  amount: number
+  currency: string
+  historicalAvg: number
+  historicalMax: number
+  submittedBy: string
+  approvedBy: string
+  selfApproved: boolean
+  modifiedAfterEntry: boolean
+  dualAuthFollowed: boolean
+  referenceText: string
+  freeTextNotes: string
+}
+
+export interface BECRelationship {
+  clientName: string
+  tenureYears: number
+  typicalAmountMin: number
+  typicalAmountMax: number
+  typicalCountries: string[]
+  typicalChannels: string[]
+  rmName: string
+  rmConsulted: boolean
+  lastPaymentDate: string
+  totalPaymentsLast12M: number
+}
+
+export interface BECIdentity {
+  submittingUser: string
+  userId: string
+  loginTime: string
+  deviceIsNew: boolean
+  loginLocation: string
+  expectedLocation: string
+  mfaUsed: boolean
+  approvalAuthoritySufficient: boolean
+  sessionDurationMinutes: number
+}
+
+export interface BECExternalIntel {
+  beneficiaryFraudFlag: boolean
+  beneficiaryFraudSource: string | null
+  ipFlagged: boolean
+  ipFraudSource: string | null
+  emailDomainAgeDays: number
+  emailDomainIsLookalike: boolean
+  lookalikeDomain: string | null
+  swiftControlsFlag: boolean
+  fincenMatch: boolean
+}
+
+export interface BECCase {
+  id: string
+  signalId?: string
+  anomalyScore: number
+  status: 'blocked' | 'flagged' | 'cleared'
+  severity: 'critical' | 'high' | 'medium'
+  createdAt: string
+  email: BECEmail
+  instruction: BECInstruction
+  relationship: BECRelationship
+  identity: BECIdentity
+  externalIntel: BECExternalIntel
+  riskFlags: string[]
+}
