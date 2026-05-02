@@ -120,12 +120,14 @@ export interface AgentDecision {
 export interface Agent {
   id: string
   name: string
+  model: string
   description: string
   status: AgentStatus
   precision: number
   recall: number
   decisionsToday: number
   lastCase: string
+  showInOverview: boolean
   recentDecisions: AgentDecision[]
 }
 
