@@ -15,6 +15,13 @@ const INITIAL: Message = {
   content: 'I am the Vigil Copilot. Describe the behavioral anomaly you want to monitor — in plain English — and I will map it to your data schema, generate a detection rule, and prepare it for deployment.',
 }
 
+const SUGGESTIONS = [
+  { label: 'Rapid liquidation after credential reset',   prompt: 'Flag accounts that liquidate 80% of holdings within 3 days of a password reset' },
+  { label: 'Wire to out-of-profile jurisdiction',        prompt: 'Flag wire transfers to countries outside the client\'s historical profile' },
+  { label: 'Impossible travel login',                    prompt: 'Detect impossible travel — login from two distant IPs within 10 minutes' },
+  { label: 'Dormant account wakeup',                     prompt: 'Alert on dormant accounts that suddenly wake up with large settlement instructions' },
+]
+
 function getResponse(input: string): Omit<Message, 'role'> {
   const low = input.toLowerCase()
 
@@ -126,8 +133,8 @@ export function RuleBuilder({ onOpenSettings, isConfigured }: { onOpenSettings: 
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const send = () => {
-    const val = input.trim()
+  const send = (override?: string) => {
+    const val = (override ?? input).trim()
     if (!val) return
     const userMsg: Message = { role: 'user', content: val }
     const response: Message = { role: 'assistant', ...getResponse(val) }
@@ -220,18 +227,35 @@ export function RuleBuilder({ onOpenSettings, isConfigured }: { onOpenSettings: 
         <div ref={bottomRef} />
       </div>
 
-      <div className="px-6 py-4 border-t border-slate-200 bg-white">
+      <div className="px-6 py-4 border-t border-gray-200 bg-white space-y-3">
+        {messages.length === 1 && (
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Suggested detections</p>
+            <div className="flex flex-wrap gap-2">
+              {SUGGESTIONS.map(s => (
+                <button
+                  key={s.label}
+                  onClick={() => send(s.prompt)}
+                  className="flex items-center gap-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-full hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                >
+                  <Wand2 className="w-3 h-3 shrink-0" />
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="flex gap-3">
           <input
             type="text"
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && send()}
-            placeholder="e.g. Flag accounts that liquidate 80% of holdings within 3 days of a password reset..."
-            className="flex-1 px-4 py-3 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Describe the anomaly or fraud pattern you want to monitor…"
+            className="flex-1 px-4 py-3 rounded-xl border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           <button
-            onClick={send}
+            onClick={() => send()}
             disabled={!input.trim()}
             className="flex items-center gap-2 px-4 py-3 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
