@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Mail, CreditCard, Fingerprint, Network, ShieldCheck, Cpu,
   AlertTriangle, Globe, MapPin, Monitor, UserX, Zap, Activity,
-  Lock, Clock, Hash, ArrowUpRight,
+  Lock, Clock, Hash, ArrowUpRight, ChevronLeft,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { BEC_CASES } from '../data/becCases'
@@ -11,15 +11,15 @@ import type { BECCase } from '../types'
 // ── Agent registry ────────────────────────────────────────────────────────────
 
 const AGENTS = [
-  { id: 'email'     as const, name: 'Email Screener',    model: 'NLP / Transformer', icon: Mail,       accent: { dot: 'bg-sky-400',     text: 'text-sky-300',     border: 'border-sky-500/40',     bar: 'bg-sky-500',     line: 'text-sky-200'  } },
-  { id: 'payment'   as const, name: 'Payment Anomaly',   model: 'XGBoost Ensemble',  icon: CreditCard,  accent: { dot: 'bg-violet-400',  text: 'text-violet-300',  border: 'border-violet-500/40',  bar: 'bg-violet-500',  line: 'text-violet-200' } },
-  { id: 'identity'  as const, name: 'Identity & Session', model: 'Isolation Forest', icon: Fingerprint, accent: { dot: 'bg-amber-400',   text: 'text-amber-300',   border: 'border-amber-500/40',   bar: 'bg-amber-500',   line: 'text-amber-200' } },
-  { id: 'graph'     as const, name: 'Relationship Graph', model: 'Graph Neural Net', icon: Network,     accent: { dot: 'bg-emerald-400', text: 'text-emerald-300', border: 'border-emerald-500/40', bar: 'bg-emerald-500', line: 'text-emerald-200' } },
-  { id: 'intel'     as const, name: 'Counterparty Intel', model: 'Rules + BERT',     icon: ShieldCheck, accent: { dot: 'bg-rose-400',    text: 'text-rose-300',    border: 'border-rose-500/40',    bar: 'bg-rose-500',    line: 'text-rose-200'  } },
+  { id: 'email'     as const, name: 'Email Screener',     model: 'NLP / Transformer', icon: Mail,       accent: { dot: 'bg-sky-400',     text: 'text-sky-300',     border: 'border-sky-500/40',     bar: 'bg-sky-500'     } },
+  { id: 'payment'   as const, name: 'Payment Anomaly',    model: 'XGBoost Ensemble',  icon: CreditCard,  accent: { dot: 'bg-violet-400',  text: 'text-violet-300',  border: 'border-violet-500/40',  bar: 'bg-violet-500'  } },
+  { id: 'identity'  as const, name: 'Identity & Session', model: 'Isolation Forest',  icon: Fingerprint, accent: { dot: 'bg-amber-400',   text: 'text-amber-300',   border: 'border-amber-500/40',   bar: 'bg-amber-500'   } },
+  { id: 'graph'     as const, name: 'Relationship Graph', model: 'Graph Neural Net',  icon: Network,     accent: { dot: 'bg-emerald-400', text: 'text-emerald-300', border: 'border-emerald-500/40', bar: 'bg-emerald-500' } },
+  { id: 'intel'     as const, name: 'Counterparty Intel', model: 'Rules + BERT',      icon: ShieldCheck, accent: { dot: 'bg-rose-400',    text: 'text-rose-300',    border: 'border-rose-500/40',    bar: 'bg-rose-500'    } },
 ]
 type AgentId = typeof AGENTS[number]['id']
 
-// ── Risk entity colours (dark mode, bold) ─────────────────────────────────────
+// ── Risk entity colours (dark mode) ──────────────────────────────────────────
 
 const ENTITY_RISK: Record<string, string> = {
   deadline:    'bg-red-900/70 text-red-200 border border-red-600/60 ring-1 ring-red-500/40',
@@ -30,15 +30,9 @@ const ENTITY_RISK: Record<string, string> = {
   location:    'bg-teal-900/60 text-teal-200 border border-teal-600/50',
 }
 const ENTITY_DIM: Record<string, string> = {
-  deadline:    'text-slate-500',
-  amount:      'text-slate-500',
-  account:     'text-slate-500',
-  institution: 'text-slate-500',
-  person:      'text-slate-500',
-  location:    'text-slate-500',
+  deadline: 'text-slate-500', amount: 'text-slate-500', account: 'text-slate-500',
+  institution: 'text-slate-500', person: 'text-slate-500', location: 'text-slate-500',
 }
-
-// ── Which entity types each agent activates (at which log-line index) ─────────
 
 const ENTITY_ACTIVATIONS: Partial<Record<AgentId, Partial<Record<number, string[]>>>> = {
   email:   { 1: ['deadline'], 2: ['location'], 4: ['person'] },
@@ -49,16 +43,10 @@ const ENTITY_ACTIVATIONS: Partial<Record<AgentId, Partial<Record<number, string[
 // ── Signal card type & builder ────────────────────────────────────────────────
 
 interface SCard {
-  id: string
-  agentId: AgentId
-  atLine: number
+  id: string; agentId: AgentId; atLine: number
   Icon: React.FC<{ className?: string }>
-  label: string
-  value: string
-  detail: string
-  sev: 'critical' | 'high' | 'medium'
+  label: string; value: string; detail: string; sev: 'critical' | 'high' | 'medium'
 }
-
 const SEV_CARD: Record<SCard['sev'], { border: string; bg: string; icon: string; dot: string; val: string }> = {
   critical: { border: 'border-red-600/50',    bg: 'bg-red-950/60',    icon: 'text-red-400',    dot: 'bg-red-500',    val: 'text-red-200'    },
   high:     { border: 'border-orange-600/50', bg: 'bg-orange-950/60', icon: 'text-orange-400', dot: 'bg-orange-500', val: 'text-orange-200' },
@@ -68,52 +56,34 @@ const SEV_CARD: Record<SCard['sev'], { border: string; bg: string; icon: string;
 function buildSignalCards(c: BECCase): SCard[] {
   const { email: e, instruction: i, identity: id, externalIntel: ei, relationship: r, nlpAnalysis: n } = c
   const cards: SCard[] = []
-
   if (ei.emailDomainIsLookalike)
     cards.push({ id:'domain_lookalike', agentId:'email', atLine:2, Icon:AlertTriangle, label:'Domain Lookalike', value:`${e.senderAddress.split('@')[1]}`, detail:`spoofs ${ei.lookalikeDomain ?? 'known domain'} · ${e.senderDomainAgeDays}d old`, sev:'critical' })
-
   if (n.urgencyPhrases.length > 0)
-    cards.push({ id:'urgency_phrases', agentId:'email', atLine:1, Icon:Zap, label:'Urgency Language', value:`${n.urgencyPhrases.length} phrases detected`, detail:`"${n.urgencyPhrases[0]?.slice(0,38)}"`, sev:'high' })
-
+    cards.push({ id:'urgency', agentId:'email', atLine:1, Icon:Zap, label:'Urgency Language', value:`${n.urgencyPhrases.length} phrases`, detail:`"${n.urgencyPhrases[0]?.slice(0,38)}"`, sev:'high' })
   if (n.overridePhrases.length > 0)
-    cards.push({ id:'override_phrases', agentId:'email', atLine:1, Icon:Lock, label:'Override Request', value:`${n.overridePhrases.length} override phrases`, detail:`"${n.overridePhrases[0]?.slice(0,38)}"`, sev:'critical' })
-
+    cards.push({ id:'override', agentId:'email', atLine:1, Icon:Lock, label:'Override Request', value:`${n.overridePhrases.length} override phrases`, detail:`"${n.overridePhrases[0]?.slice(0,38)}"`, sev:'critical' })
   if (e.dkim === 'fail' || e.spf === 'fail')
-    cards.push({ id:'auth_fail', agentId:'email', atLine:4, Icon:AlertTriangle, label:'Auth Failure', value:`DKIM ${e.dkim.toUpperCase()} · SPF ${e.spf.toUpperCase()} · DMARC ${e.dmarc.toUpperCase()}`, detail:`Sender domain not authenticated`, sev:'high' })
-
+    cards.push({ id:'auth_fail', agentId:'email', atLine:4, Icon:AlertTriangle, label:'Auth Failure', value:`DKIM ${e.dkim.toUpperCase()} · SPF ${e.spf.toUpperCase()}`, detail:`Sender domain not authenticated`, sev:'high' })
   if (i.amountDeviationFactor > 2)
-    cards.push({ id:'amount_anomaly', agentId:'payment', atLine:1, Icon:ArrowUpRight, label:'Amount Anomaly', value:`${i.amountDeviationFactor.toFixed(1)}× client average`, detail:`${i.currency} ${i.amount.toLocaleString()} vs avg ${i.historicalAvg.toLocaleString()}`, sev: i.amountDeviationFactor > 5 ? 'critical' : 'high' })
-
+    cards.push({ id:'amount', agentId:'payment', atLine:1, Icon:ArrowUpRight, label:'Amount Anomaly', value:`${i.amountDeviationFactor.toFixed(1)}× avg`, detail:`${i.currency} ${i.amount.toLocaleString()} vs avg ${i.historicalAvg.toLocaleString()}`, sev: i.amountDeviationFactor > 5 ? 'critical' : 'high' })
   if (i.beneficiaryIsNew)
-    cards.push({ id:'new_beneficiary', agentId:'payment', atLine:2, Icon:UserX, label:'New Beneficiary', value:i.beneficiaryName.slice(0,28), detail:`${i.beneficiaryCountry} · first occurrence in registry`, sev:'high' })
-
+    cards.push({ id:'new_bene', agentId:'payment', atLine:2, Icon:UserX, label:'New Beneficiary', value:i.beneficiaryName.slice(0,26), detail:`${i.beneficiaryCountry} · first occurrence`, sev:'high' })
   if (!i.dualAuthFollowed || i.selfApproved)
-    cards.push({ id:'control_bypass', agentId:'payment', atLine:3, Icon:Lock, label:`${i.selfApproved ? 'Self-Approval' : 'Dual-Auth Bypassed'}`, value:`${i.approvalWorkflowMinutes}min approval`, detail:i.selfApproved ? `${i.submittedBy} approved own instruction` : 'Maker-checker control not followed', sev:'critical' })
-
+    cards.push({ id:'control', agentId:'payment', atLine:3, Icon:Lock, label: i.selfApproved ? 'Self-Approval' : 'Dual-Auth Bypassed', value:`${i.approvalWorkflowMinutes}min approval`, detail: i.selfApproved ? `${i.submittedBy} approved own instruction` : 'Maker-checker control not followed', sev:'critical' })
   if (id.deviceIsNew)
-    cards.push({ id:'new_device', agentId:'identity', atLine:1, Icon:Monitor, label:'Unknown Device', value:'New device — not in registry', detail:id.deviceId.slice(0,30), sev:'high' })
-
+    cards.push({ id:'device', agentId:'identity', atLine:1, Icon:Monitor, label:'Unknown Device', value:'New — not in registry', detail:id.deviceId.slice(0,28), sev:'high' })
   if (id.loginLocation !== id.expectedLocation)
-    cards.push({ id:'location_mismatch', agentId:'identity', atLine:2, Icon:MapPin, label:'Location Mismatch', value:id.loginLocation, detail:`expected: ${id.expectedLocation}`, sev:'high' })
-
-  if (id.vpnDetected)
-    cards.push({ id:'vpn', agentId:'identity', atLine:3, Icon:Globe, label:'VPN Detected', value:'Anonymous routing active', detail:`Session origin masked`, sev:'medium' })
-
+    cards.push({ id:'location', agentId:'identity', atLine:2, Icon:MapPin, label:'Location Mismatch', value:id.loginLocation, detail:`expected: ${id.expectedLocation}`, sev:'high' })
   if (ei.ipFlagged)
-    cards.push({ id:'ip_flagged', agentId:'graph', atLine:4, Icon:AlertTriangle, label:'Flagged IP', value:e.originatingIP, detail:(ei.ipFraudSource ?? '').slice(0,40), sev:'critical' })
-
+    cards.push({ id:'ip', agentId:'graph', atLine:4, Icon:AlertTriangle, label:'Flagged IP', value:e.originatingIP, detail:(ei.ipFraudSource ?? '').slice(0,38), sev:'critical' })
   if (!r.typicalCountries.includes(i.beneficiaryCountry))
-    cards.push({ id:'new_jurisdiction', agentId:'graph', atLine:3, Icon:Globe, label:'New Jurisdiction', value:i.beneficiaryCountry, detail:`outside baseline: ${r.typicalCountries.join(', ')}`, sev:'high' })
-
+    cards.push({ id:'jurisdiction', agentId:'graph', atLine:3, Icon:Globe, label:'New Jurisdiction', value:i.beneficiaryCountry, detail:`outside baseline: ${r.typicalCountries.join(', ')}`, sev:'high' })
   if (i.submittedOutsideHours)
-    cards.push({ id:'off_hours', agentId:'payment', atLine:3, Icon:Clock, label:'Off-Hours Submission', value:i.submittedAt, detail:'Outside normal business hours', sev:'medium' })
-
+    cards.push({ id:'hours', agentId:'payment', atLine:3, Icon:Clock, label:'Off-Hours Submission', value:i.submittedAt, detail:'Outside normal business hours', sev:'medium' })
   if (ei.swiftControlsFlag)
-    cards.push({ id:'swift_flag', agentId:'intel', atLine:2, Icon:Activity, label:'SWIFT Controls Alert', value:'Payment flagged for review', detail:ei.beneficiaryBankCountryRisk.slice(0,40), sev:'high' })
-
+    cards.push({ id:'swift', agentId:'intel', atLine:2, Icon:Activity, label:'SWIFT Controls Alert', value:'Payment flagged', detail:ei.beneficiaryBankCountryRisk.split('—')[0].trim(), sev:'high' })
   if (ei.fincenMatch || ei.beneficiaryFraudFlag)
-    cards.push({ id:'fraud_network', agentId:'intel', atLine:1, Icon:Hash, label:'Fraud Network Match', value:'Beneficiary flagged', detail:(ei.beneficiaryFraudSource ?? 'FinCEN 314(b) match').slice(0,40), sev:'critical' })
-
+    cards.push({ id:'fraud_net', agentId:'intel', atLine:1, Icon:Hash, label:'Fraud Network Match', value:'Beneficiary flagged', detail:(ei.beneficiaryFraudSource ?? 'FinCEN 314(b) match').slice(0,38), sev:'critical' })
   return cards.slice(0, 10)
 }
 
@@ -121,89 +91,276 @@ function buildSignalCards(c: BECCase): SCard[] {
 
 function computeAgentData(c: BECCase): Record<AgentId, { score: number; lines: string[] }> {
   const { email: e, nlpAnalysis: n, externalIntel: ei, instruction: i, identity: id, relationship: r } = c
-
-  const emailLines = [
-    `Loading ${c.relationship.clientName} corpus — ${n.histStyleBaselineSamples} baseline emails`,
-    `Urgency: ${n.urgencyPhrases.length} phrases · Secrecy: ${n.secrecyPhrases.length} · Override: ${n.overridePhrases.length}`,
-    ei.emailDomainIsLookalike ? `Lookalike domain: ${e.senderAddress.split('@')[1]} ↔ ${ei.lookalikeDomain}` : `Domain ${e.senderAddress.split('@')[1]} — no lookalike`,
-    `Style match: ${Math.round(n.writingStyleConsistency * 100)}% — ${n.writingStyleConsistency < 0.55 ? 'anomalous authorship' : 'within range'}`,
-    `DKIM ${e.dkim.toUpperCase()} · SPF ${e.spf.toUpperCase()} · DMARC ${e.dmarc.toUpperCase()} · domain ${e.senderDomainAgeDays}d`,
-  ]
-  let emailScore = 0
-  emailScore += Math.min(n.urgencyPhrases.length * 0.11, 0.33)
-  emailScore += Math.min(n.overridePhrases.length * 0.14, 0.28)
-  emailScore += (1 - n.writingStyleConsistency) * 0.21
-  emailScore += ei.emailDomainIsLookalike ? 0.26 : 0
-  emailScore += e.senderDomainAgeDays < 90 ? 0.14 : e.senderDomainAgeDays < 180 ? 0.07 : 0
-  emailScore += e.dkim === 'fail' ? 0.06 : 0
-
-  const paymentLines = [
-    `Instruction: ${i.currency} ${i.amount.toLocaleString()} → ${i.beneficiaryName}`,
-    `Amount: ${i.amountDeviationFactor.toFixed(1)}× avg — ${i.amountDeviationFactor > 5 ? 'extreme outlier' : i.amountDeviationFactor > 2 ? 'elevated' : 'normal'}`,
-    `Beneficiary: ${i.beneficiaryIsNew ? 'FIRST-OCCURRENCE · absent from registry' : 'known counterparty'}`,
-    `${i.submittedOutsideHours ? 'OFF-HOURS' : 'Standard hours'} · ${i.approvalWorkflowMinutes}min approval · dual-auth: ${i.dualAuthFollowed ? 'yes' : 'BYPASSED'}`,
-    `Round-number: ${i.roundNumberFlag ? 'YES' : 'no'} · Below-threshold: ${i.belowThresholdFlag ? 'YES' : 'no'}`,
-  ]
-  let paymentScore = 0
-  paymentScore += Math.min((i.amountDeviationFactor - 1) / 11, 1) * 0.32
-  paymentScore += i.beneficiaryIsNew ? 0.28 : 0
-  paymentScore += i.submittedOutsideHours ? 0.14 : 0
-  paymentScore += i.roundNumberFlag ? 0.13 : 0
-  paymentScore += i.belowThresholdFlag ? 0.13 : 0
-
-  const locMismatch = id.loginLocation !== id.expectedLocation
-  const identityLines = [
-    `User ${id.submittingUser} · ${id.loginTime}`,
-    `Device: ${id.deviceIsNew ? 'NEW — not in registry' : 'recognised'} · ${id.deviceId.slice(0, 18)}`,
-    `Location: ${id.loginLocation} — expected ${id.expectedLocation} · ${locMismatch ? 'MISMATCH' : 'match'}`,
-    `MFA: ${id.mfaUsed ? id.mfaMethod : 'NOT USED'} · VPN: ${id.vpnDetected ? 'DETECTED' : 'none'} · failed logins: ${id.priorFailedLogins}`,
-    `Approval: ${i.approvalWorkflowMinutes}min${i.selfApproved ? ' · SELF-APPROVED' : ''}`,
-  ]
-  let identityScore = 0
-  identityScore += id.deviceIsNew ? 0.30 : 0
-  identityScore += locMismatch ? 0.23 : 0
-  identityScore += i.selfApproved ? 0.22 : 0
-  identityScore += i.approvalWorkflowMinutes < 5 ? 0.18 : i.approvalWorkflowMinutes < 15 ? 0.09 : 0
-  identityScore += id.vpnDetected ? 0.07 : 0
-
-  const countryInBaseline = r.typicalCountries.includes(i.beneficiaryCountry)
-  const graphLines = [
-    `Graph: ${r.clientName} · ${r.totalPaymentsLast12M} payments · ${r.counterpartyRegistryCount} counterparties`,
-    `${i.beneficiaryName}: ${i.beneficiaryIsNew ? 'ABSENT from graph — new isolated node' : 'found in counterparty graph'}`,
-    `Fraud network: ${ei.beneficiaryFraudFlag ? `FLAGGED — ${ei.beneficiaryFraudSource?.slice(0,35)}` : 'no beneficiary fraud match'}`,
-    `Geography: ${i.beneficiaryCountry} ${countryInBaseline ? 'within' : 'OUTSIDE'} baseline (${r.typicalCountries.join(', ')})`,
-    `IP ${e.originatingIP}: ${ei.ipFlagged ? `FLAGGED · ${ei.ipAsn.slice(0, 28)}` : 'no fraud signal'}`,
-  ]
-  let graphScore = 0
-  graphScore += ei.beneficiaryFraudFlag ? 0.38 : 0
-  graphScore += ei.emailDomainIsLookalike ? 0.22 : 0
-  graphScore += !countryInBaseline ? 0.22 : 0
-  graphScore += ei.ipFlagged ? 0.18 : 0
-
-  const regFlags: string[] = []
-  if (ei.swiftControlsFlag) regFlags.push('SWIFT')
-  if (ei.ofacMatch) regFlags.push('OFAC')
-  if (ei.fincenMatch) regFlags.push('FinCEN')
-  const intelLines = [
-    `OFAC: ${ei.ofacMatch ? 'MATCH FOUND' : 'clear'} · FinCEN 314(b): ${ei.fincenMatch ? 'MATCH' : 'no match'}`,
-    `SWIFT GPI: ${ei.swiftControlsFlag ? 'CONTROLS ALERT' : 'no alert'} · country risk: ${ei.beneficiaryBankCountryRisk.split('—')[0].trim()}`,
-    `Beneficiary fraud flag: ${ei.beneficiaryFraudFlag ? `YES — ${(ei.beneficiaryFraudSource ?? '').slice(0,30)}` : 'none'}`,
-    `AML typology: ${ei.emailDomainIsLookalike && i.beneficiaryIsNew ? 'BEC-3A' : !i.dualAuthFollowed ? 'BEC-5A' : !countryInBaseline ? 'BEC-2B' : 'BEC-1C'}`,
-    `Sanctions: ${ei.sanctionsScreeningResult.slice(0, 45)} ${regFlags.length ? `· flags: ${regFlags.join(', ')}` : ''}`,
-  ]
-  let intelScore = 0
-  intelScore += ei.ofacMatch ? 0.40 : 0
-  intelScore += ei.fincenMatch ? 0.28 : 0
-  intelScore += ei.swiftControlsFlag ? 0.22 : 0
-  if (intelScore < 0.12 && !countryInBaseline) intelScore += 0.20
-
+  let es=0; es+=Math.min(n.urgencyPhrases.length*.11,.33); es+=Math.min(n.overridePhrases.length*.14,.28); es+=(1-n.writingStyleConsistency)*.21; es+=ei.emailDomainIsLookalike?.26:0; es+=e.senderDomainAgeDays<90?.14:e.senderDomainAgeDays<180?.07:0; es+=e.dkim==='fail'?.06:0
+  let ps=0; ps+=Math.min((i.amountDeviationFactor-1)/11,1)*.32; ps+=i.beneficiaryIsNew?.28:0; ps+=i.submittedOutsideHours?.14:0; ps+=i.roundNumberFlag?.13:0; ps+=i.belowThresholdFlag?.13:0
+  const lm=id.loginLocation!==id.expectedLocation; let is=0; is+=id.deviceIsNew?.30:0; is+=lm?.23:0; is+=i.selfApproved?.22:0; is+=i.approvalWorkflowMinutes<5?.18:i.approvalWorkflowMinutes<15?.09:0; is+=id.vpnDetected?.07:0
+  const cb=r.typicalCountries.includes(i.beneficiaryCountry); let gs=0; gs+=ei.beneficiaryFraudFlag?.38:0; gs+=ei.emailDomainIsLookalike?.22:0; gs+=!cb?.22:0; gs+=ei.ipFlagged?.18:0
+  let ns=0; ns+=ei.ofacMatch?.40:0; ns+=ei.fincenMatch?.28:0; ns+=ei.swiftControlsFlag?.22:0; if(ns<.12&&!cb) ns+=.20
   return {
-    email:    { score: Math.min(1, emailScore),    lines: emailLines    },
-    payment:  { score: Math.min(1, paymentScore),  lines: paymentLines  },
-    identity: { score: Math.min(1, identityScore), lines: identityLines },
-    graph:    { score: Math.min(1, graphScore),     lines: graphLines    },
-    intel:    { score: Math.min(1, intelScore),     lines: intelLines    },
+    email:    { score:Math.min(1,es), lines:[ `Loading ${r.clientName} baseline — ${n.histStyleBaselineSamples} emails`, `Urgency: ${n.urgencyPhrases.length} · Secrecy: ${n.secrecyPhrases.length} · Override: ${n.overridePhrases.length}`, ei.emailDomainIsLookalike?`Lookalike: ${e.senderAddress.split('@')[1]} ↔ ${ei.lookalikeDomain}`:`Domain check — no lookalike detected`, `Style match: ${Math.round(n.writingStyleConsistency*100)}% — ${n.writingStyleConsistency<.55?'anomalous authorship':'within range'}`, `DKIM ${e.dkim.toUpperCase()} · SPF ${e.spf.toUpperCase()} · DMARC ${e.dmarc.toUpperCase()} · domain ${e.senderDomainAgeDays}d` ] },
+    payment:  { score:Math.min(1,ps), lines:[ `Instruction: ${i.currency} ${i.amount.toLocaleString()} → ${i.beneficiaryName}`, `Amount: ${i.amountDeviationFactor.toFixed(1)}× avg — ${i.amountDeviationFactor>5?'extreme outlier':i.amountDeviationFactor>2?'elevated':'normal'}`, `Beneficiary: ${i.beneficiaryIsNew?'FIRST-OCCURRENCE · absent from registry':'known counterparty'}`, `${i.submittedOutsideHours?'OFF-HOURS':'Standard hours'} · ${i.approvalWorkflowMinutes}min · dual-auth: ${i.dualAuthFollowed?'yes':'BYPASSED'}`, `Round-number: ${i.roundNumberFlag?'YES':'no'} · Below-threshold: ${i.belowThresholdFlag?'YES':'no'}` ] },
+    identity: { score:Math.min(1,is), lines:[ `User ${id.submittingUser} · ${id.loginTime}`, `Device: ${id.deviceIsNew?'NEW — not in registry':'recognised'} · ${id.deviceId.slice(0,18)}`, `Location: ${id.loginLocation} — expected ${id.expectedLocation} · ${lm?'MISMATCH':'match'}`, `MFA: ${id.mfaUsed?id.mfaMethod:'NOT USED'} · VPN: ${id.vpnDetected?'DETECTED':'none'} · failed: ${id.priorFailedLogins}`, `Approval: ${i.approvalWorkflowMinutes}min${i.selfApproved?' · SELF-APPROVED':''}` ] },
+    graph:    { score:Math.min(1,gs), lines:[ `Graph: ${r.clientName} · ${r.totalPaymentsLast12M} payments · ${r.counterpartyRegistryCount} counterparties`, `${i.beneficiaryName}: ${i.beneficiaryIsNew?'ABSENT — new isolated node':'found in graph'}`, `Fraud network: ${ei.beneficiaryFraudFlag?`FLAGGED — ${ei.beneficiaryFraudSource?.slice(0,30)}`:'no beneficiary match'}`, `Geography: ${i.beneficiaryCountry} ${cb?'within':'OUTSIDE'} baseline (${r.typicalCountries.join(', ')})`, `IP ${e.originatingIP}: ${ei.ipFlagged?`FLAGGED · ${ei.ipAsn.slice(0,28)}`:'no fraud signal'}` ] },
+    intel:    { score:Math.min(1,ns), lines:[ `OFAC: ${ei.ofacMatch?'MATCH FOUND':'clear'} · FinCEN 314(b): ${ei.fincenMatch?'MATCH':'no match'}`, `SWIFT GPI: ${ei.swiftControlsFlag?'CONTROLS ALERT':'no alert'} · country risk: ${ei.beneficiaryBankCountryRisk.split('—')[0].trim()}`, `Fraud flag: ${ei.beneficiaryFraudFlag?`YES — ${(ei.beneficiaryFraudSource??'').slice(0,30)}`:'none'}`, `AML typology: ${ei.emailDomainIsLookalike&&i.beneficiaryIsNew?'BEC-3A':!i.dualAuthFollowed?'BEC-5A':!cb?'BEC-2B':'BEC-1C'}`, `Sanctions: ${ei.sanctionsScreeningResult.slice(0,42)}` ] },
   }
+}
+
+// ── Agent detail helper primitives ────────────────────────────────────────────
+
+type ALvl = 'critical' | 'high' | 'medium' | 'ok' | undefined
+
+function ARow({ label, value, lvl, mono }: { label: string; value: string; lvl?: ALvl; mono?: boolean }) {
+  const vc = lvl === 'critical' ? 'text-red-300 bg-red-950/60 px-1 rounded border border-red-700/40 font-bold'
+    : lvl === 'high'   ? 'text-orange-300 bg-orange-950/50 px-1 rounded border border-orange-700/30'
+    : lvl === 'medium' ? 'text-amber-300 bg-amber-950/40 px-1 rounded'
+    : lvl === 'ok'     ? 'text-emerald-400'
+    : 'text-slate-300'
+  return (
+    <div className="flex items-start gap-2 py-1.5 border-b border-slate-800/40 last:border-0">
+      <span className="text-[10px] text-slate-500 shrink-0 w-[4.5rem] leading-relaxed">{label}</span>
+      <span className={clsx('text-[10px] flex-1 text-right leading-relaxed break-words', mono && 'font-mono', vc)}>{value}</span>
+    </div>
+  )
+}
+function ASec({ title }: { title: string }) {
+  return <div className="text-[9px] font-bold text-slate-600 uppercase tracking-widest px-3 pt-3 pb-1.5 bg-slate-950/40">{title}</div>
+}
+
+// ── Per-agent detail views (shown in left panel on agent click) ───────────────
+
+function EmailDetail({ c }: { c: BECCase }) {
+  const { email: e, nlpAnalysis: n, externalIntel: ei } = c
+  return (
+    <div>
+      <ASec title="NLP Analysis" />
+      <div className="px-3">
+        <ARow label="Primary tone"  value={n.primaryTone}  />
+        <ARow label="Secondary"     value={n.secondaryTone} />
+        <ARow label="Style match"   value={`${Math.round(n.writingStyleConsistency*100)}%`} lvl={n.writingStyleConsistency<.4?'critical':n.writingStyleConsistency<.6?'high':undefined} />
+        <ARow label="Baseline"      value={`${n.histStyleBaselineSamples} emails`} />
+        <ARow label="Grammar errs"  value={n.grammaticalErrorCount.toString()} lvl={n.grammaticalErrorCount>2?'high':n.grammaticalErrorCount>0?'medium':undefined} />
+        <ARow label="Sentiment"     value={`${n.sentimentLabel} (${n.sentiment.toFixed(2)})`} lvl={n.sentiment<-.5?'high':undefined} />
+      </div>
+      <ASec title="Signal Phrases" />
+      <div className="px-3">
+        <ARow label="Urgency"   value={`${n.urgencyPhrases.length} phrases`}  lvl={n.urgencyPhrases.length>2?'critical':n.urgencyPhrases.length>0?'high':undefined} />
+        <ARow label="Secrecy"   value={`${n.secrecyPhrases.length} phrases`}  lvl={n.secrecyPhrases.length>1?'high':n.secrecyPhrases.length>0?'medium':undefined} />
+        <ARow label="Override"  value={`${n.overridePhrases.length} phrases`} lvl={n.overridePhrases.length>0?'critical':undefined} />
+        <ARow label="Authority" value={`${n.authorityPhrases.length} phrases`} lvl={n.authorityPhrases.length>2?'medium':undefined} />
+      </div>
+      {n.urgencyPhrases.length > 0 && (
+        <>
+          <ASec title="Top Urgency Phrases" />
+          <div className="px-3 space-y-1 pb-2">
+            {n.urgencyPhrases.slice(0,3).map((p,i) => (
+              <div key={i} className="text-[10px] font-mono text-red-300 bg-red-950/40 px-2 py-1 rounded border border-red-800/40 leading-relaxed">"{p}"</div>
+            ))}
+          </div>
+        </>
+      )}
+      {n.overridePhrases.length > 0 && (
+        <>
+          <ASec title="Override Requests" />
+          <div className="px-3 space-y-1 pb-2">
+            {n.overridePhrases.slice(0,2).map((p,i) => (
+              <div key={i} className="text-[10px] font-mono text-amber-300 bg-amber-950/40 px-2 py-1 rounded border border-amber-800/40 leading-relaxed">"{p}"</div>
+            ))}
+          </div>
+        </>
+      )}
+      <ASec title="Auth & Routing" />
+      <div className="px-3">
+        <ARow label="DKIM"     value={e.dkim.toUpperCase()}  lvl={e.dkim==='fail'?'critical':'ok'} mono />
+        <ARow label="SPF"      value={e.spf.toUpperCase()}   lvl={e.spf==='fail'?'critical':'ok'} mono />
+        <ARow label="DMARC"    value={e.dmarc.toUpperCase()} lvl={e.dmarc==='fail'?'critical':'ok'} mono />
+        <ARow label="Reply-To" value={e.replyToAddress ?? 'same as sender'} lvl={e.replyToAddress?'high':undefined} mono />
+        <ARow label="Prior emails" value={`${e.totalEmailsFromSender} from sender`} lvl={e.isFirstContact?'high':undefined} />
+      </div>
+      <ASec title="Domain Intelligence" />
+      <div className="px-3">
+        <ARow label="Domain"    value={e.senderAddress.split('@')[1]} mono lvl={ei.emailDomainIsLookalike?'critical':undefined} />
+        <ARow label="Age"       value={`${e.senderDomainAgeDays} days`} lvl={e.senderDomainAgeDays<30?'critical':e.senderDomainAgeDays<90?'high':e.senderDomainAgeDays<180?'medium':undefined} />
+        <ARow label="Lookalike" value={ei.emailDomainIsLookalike?`YES ↔ ${ei.lookalikeDomain}`:'no'} lvl={ei.emailDomainIsLookalike?'critical':'ok'} />
+        <ARow label="Registrar" value={e.senderDomainRegistrar} />
+      </div>
+    </div>
+  )
+}
+
+function PaymentDetail({ c }: { c: BECCase }) {
+  const i = c.instruction
+  return (
+    <div>
+      <ASec title="Amount Analysis" />
+      <div className="px-3">
+        <ARow label="Amount"    value={`${i.currency} ${i.amount.toLocaleString()}`}    lvl={i.amountDeviationFactor>5?'critical':i.amountDeviationFactor>2?'high':undefined} mono />
+        <ARow label="Hist avg"  value={`${i.currency} ${i.historicalAvg.toLocaleString()}`} />
+        <ARow label="Hist max"  value={`${i.currency} ${i.historicalMax.toLocaleString()}`} />
+        <ARow label="Deviation" value={`${i.amountDeviationFactor.toFixed(1)}× average`} lvl={i.amountDeviationFactor>5?'critical':i.amountDeviationFactor>2?'high':undefined} />
+        <ARow label="Round no." value={i.roundNumberFlag?'YES':'no'} lvl={i.roundNumberFlag?'medium':undefined} />
+        <ARow label="Sub-thresh"value={i.belowThresholdFlag?'YES — structuring signal':'no'} lvl={i.belowThresholdFlag?'high':undefined} />
+      </div>
+      <ASec title="Beneficiary" />
+      <div className="px-3">
+        <ARow label="Name"      value={i.beneficiaryName}    lvl={i.beneficiaryIsNew?'high':undefined} />
+        <ARow label="Bank"      value={i.beneficiaryBank}    />
+        <ARow label="Country"   value={i.beneficiaryCountry} lvl={!c.relationship.typicalCountries.includes(i.beneficiaryCountry)?'high':undefined} />
+        <ARow label="New?"      value={i.beneficiaryIsNew?'YES — first occurrence':'known'} lvl={i.beneficiaryIsNew?'critical':undefined} />
+        <ARow label="Last pmnt" value={i.daysSinceLastPaymentToBeneficiary!==null?`${i.daysSinceLastPaymentToBeneficiary}d ago`:'never'} lvl={i.beneficiaryIsNew?'critical':undefined} />
+        <ARow label="Account"   value={i.beneficiaryAccount} mono />
+      </div>
+      <ASec title="Timing & Controls" />
+      <div className="px-3">
+        <ARow label="Submitted" value={i.submittedAt} lvl={i.submittedOutsideHours?'high':undefined} />
+        <ARow label="Off-hours" value={i.submittedOutsideHours?'YES':'no'} lvl={i.submittedOutsideHours?'high':undefined} />
+        <ARow label="Approval"  value={`${i.approvalWorkflowMinutes} minutes`} lvl={i.approvalWorkflowMinutes<5?'critical':i.approvalWorkflowMinutes<15?'high':undefined} />
+        <ARow label="Dual-auth" value={i.dualAuthFollowed?'followed':'BYPASSED'} lvl={!i.dualAuthFollowed?'critical':'ok'} />
+        <ARow label="Self-appr" value={i.selfApproved?'YES':'no'} lvl={i.selfApproved?'critical':undefined} />
+        <ARow label="Modified"  value={i.modifiedAfterEntry?'YES — after entry':'no'} lvl={i.modifiedAfterEntry?'high':undefined} />
+        <ARow label="Source"    value={i.sourceSystem} />
+        <ARow label="Channel"   value={i.channel} />
+      </div>
+    </div>
+  )
+}
+
+function IdentityDetail({ c }: { c: BECCase }) {
+  const { identity: id, instruction: i } = c
+  const locMismatch = id.loginLocation !== id.expectedLocation
+  return (
+    <div>
+      <ASec title="User Authentication" />
+      <div className="px-3">
+        <ARow label="User"      value={id.submittingUser} />
+        <ARow label="User ID"   value={id.userId} mono />
+        <ARow label="Login"     value={id.loginTime} />
+        <ARow label="MFA"       value={id.mfaUsed?id.mfaMethod:'NOT USED'} lvl={!id.mfaUsed?'critical':'ok'} />
+        <ARow label="Failed"    value={`${id.priorFailedLogins} logins (24h)`} lvl={id.priorFailedLogins>3?'critical':id.priorFailedLogins>0?'medium':undefined} />
+        <ARow label="Authority" value={id.approvalAuthoritySufficient?'sufficient':'INSUFFICIENT'} lvl={!id.approvalAuthoritySufficient?'high':undefined} />
+      </div>
+      <ASec title="Device & Location" />
+      <div className="px-3">
+        <ARow label="Device"    value={id.deviceIsNew?'NEW — unregistered':'recognised'} lvl={id.deviceIsNew?'critical':undefined} />
+        <ARow label="Device ID" value={id.deviceId.slice(0,22)} mono />
+        <ARow label="Location"  value={id.loginLocation} lvl={locMismatch?'critical':undefined} />
+        <ARow label="Expected"  value={id.expectedLocation} />
+        <ARow label="Match"     value={locMismatch?'NO — MISMATCH':'yes'} lvl={locMismatch?'critical':'ok'} />
+        <ARow label="VPN"       value={id.vpnDetected?'DETECTED':'not detected'} lvl={id.vpnDetected?'high':undefined} />
+      </div>
+      <ASec title="Session Behaviour" />
+      <div className="px-3">
+        <ARow label="Duration"  value={`${id.sessionDurationMinutes} min`} lvl={id.sessionDurationMinutes<10?'medium':undefined} />
+        <ARow label="Pages"     value={`${id.sessionPagesVisited} visited`} lvl={id.sessionPagesVisited<4?'medium':undefined} />
+        <ARow label="Approval"  value={`${i.approvalWorkflowMinutes} min`} lvl={i.approvalWorkflowMinutes<5?'critical':i.approvalWorkflowMinutes<15?'high':undefined} />
+        <ARow label="Self-appr" value={i.selfApproved?'YES — maker/checker bypassed':'no'} lvl={i.selfApproved?'critical':undefined} />
+      </div>
+    </div>
+  )
+}
+
+function GraphDetail({ c }: { c: BECCase }) {
+  const { relationship: r, instruction: i, externalIntel: ei, email: e } = c
+  const countryInBaseline = r.typicalCountries.includes(i.beneficiaryCountry)
+  return (
+    <div>
+      <ASec title="Client Baseline" />
+      <div className="px-3">
+        <ARow label="Client"    value={r.clientName} />
+        <ARow label="Tenure"    value={`${r.tenureYears} years`} lvl='ok' />
+        <ARow label="Countries" value={r.typicalCountries.join(', ')} />
+        <ARow label="Channels"  value={r.typicalChannels.join(', ')} />
+        <ARow label="Payments"  value={`${r.totalPaymentsLast12M} / last 12mo`} />
+        <ARow label="Registry"  value={`${r.counterpartyRegistryCount} known`} />
+        <ARow label="Last pmnt" value={r.lastPaymentDate} />
+      </div>
+      <ASec title="Beneficiary Node" />
+      <div className="px-3">
+        <ARow label="Name"      value={i.beneficiaryName} lvl={i.beneficiaryIsNew?'critical':undefined} />
+        <ARow label="Bank"      value={i.beneficiaryBank} />
+        <ARow label="Country"   value={i.beneficiaryCountry} lvl={!countryInBaseline?'high':undefined} />
+        <ARow label="In graph"  value={i.beneficiaryIsNew?'ABSENT — new node':'present'} lvl={i.beneficiaryIsNew?'critical':undefined} />
+        <ARow label="Baseline"  value={countryInBaseline?'within':'OUTSIDE baseline'} lvl={!countryInBaseline?'high':undefined} />
+        <ARow label="Fraud flag"value={ei.beneficiaryFraudFlag?`YES — ${(ei.beneficiaryFraudSource??'').slice(0,25)}`:'none'} lvl={ei.beneficiaryFraudFlag?'critical':undefined} />
+      </div>
+      <ASec title="IP & Network" />
+      <div className="px-3">
+        <ARow label="IP"        value={e.originatingIP} mono lvl={ei.ipFlagged?'critical':undefined} />
+        <ARow label="Flagged"   value={ei.ipFlagged?'YES':'no'} lvl={ei.ipFlagged?'critical':'ok'} />
+        <ARow label="ASN"       value={ei.ipAsn.slice(0,30)} mono lvl={ei.ipFlagged?'critical':undefined} />
+        <ARow label="Source"    value={(ei.ipFraudSource??'').slice(0,35)} lvl={ei.ipFlagged?'critical':undefined} />
+        <ARow label="Geo"       value={ei.ipGeolocation} />
+        <ARow label="Domain"    value={ei.emailDomainIsLookalike?`LOOKALIKE ↔ ${ei.lookalikeDomain}`:'no lookalike'} lvl={ei.emailDomainIsLookalike?'critical':undefined} />
+      </div>
+    </div>
+  )
+}
+
+function IntelDetail({ c }: { c: BECCase }) {
+  const { externalIntel: ei, instruction: i, relationship: r } = c
+  const cb = r.typicalCountries.includes(i.beneficiaryCountry)
+  const typology = ei.emailDomainIsLookalike && i.beneficiaryIsNew ? 'BEC-3A'
+    : !i.dualAuthFollowed || i.selfApproved ? 'BEC-5A'
+    : !cb ? 'BEC-2B' : 'BEC-1C'
+  return (
+    <div>
+      <ASec title="Sanctions Screening" />
+      <div className="px-3">
+        <ARow label="OFAC SDN"  value={ei.ofacMatch?'MATCH FOUND':'no match'} lvl={ei.ofacMatch?'critical':'ok'} />
+        <ARow label="FinCEN"    value={ei.fincenMatch?'MATCH FOUND':'no match'} lvl={ei.fincenMatch?'critical':'ok'} />
+        <ARow label="OFAC match"value={ei.ofacMatch?'YES':'cleared'} lvl={ei.ofacMatch?'critical':'ok'} />
+        <ARow label="Result"    value={ei.sanctionsScreeningResult.slice(0,40)} />
+      </div>
+      <ASec title="SWIFT Intelligence" />
+      <div className="px-3">
+        <ARow label="Controls"  value={ei.swiftControlsFlag?'ALERT — enhanced monitoring':'no alert'} lvl={ei.swiftControlsFlag?'high':undefined} />
+        <ARow label="Cntry risk"value={ei.beneficiaryBankCountryRisk.split('—')[0].trim()} lvl={ei.beneficiaryBankCountryRisk.toLowerCase().includes('high')?'critical':ei.beneficiaryBankCountryRisk.toLowerCase().includes('medium')?'high':undefined} />
+        <ARow label="Bene bank" value={i.beneficiaryBank} />
+      </div>
+      <ASec title="Fraud Flags" />
+      <div className="px-3">
+        <ARow label="Bene flag" value={ei.beneficiaryFraudFlag?'YES':'none'} lvl={ei.beneficiaryFraudFlag?'critical':'ok'} />
+        <ARow label="Fraud src" value={(ei.beneficiaryFraudSource??'N/A').slice(0,35)} lvl={ei.beneficiaryFraudFlag?'critical':undefined} />
+        <ARow label="IP flagged"value={ei.ipFlagged?'YES':'no'} lvl={ei.ipFlagged?'critical':'ok'} />
+        <ARow label="IP source" value={(ei.ipFraudSource??'N/A').slice(0,35)} lvl={ei.ipFlagged?'high':undefined} />
+        <ARow label="Geo"       value={ei.ipGeolocation} />
+        <ARow label="ASN"       value={ei.ipAsn.slice(0,30)} mono />
+      </div>
+      <ASec title="AML Typology" />
+      <div className="px-3">
+        <ARow label="Match"     value={typology} lvl='critical' />
+        <ARow label="Pattern"   value={typology==='BEC-3A'?'Lookalike + new bene':typology==='BEC-5A'?'Control override':typology==='BEC-2B'?'New offshore entity':'Social engineering'} lvl='high' />
+        <ARow label="Action"    value="Enhanced Due Diligence" lvl='medium' />
+      </div>
+    </div>
+  )
+}
+
+// ── Agent detail panel (replaces case list when agent clicked) ────────────────
+
+function AgentDetailPanel({ agentId, c, onBack }: { agentId: AgentId; c: BECCase; onBack: () => void }) {
+  const def = AGENTS.find(a => a.id === agentId)!
+  const Icon = def.icon
+  return (
+    <div className="w-52 shrink-0 bg-slate-900 border-r border-slate-800 flex flex-col overflow-hidden">
+      <div className="px-3 py-2.5 border-b border-slate-800 flex items-center gap-2 shrink-0">
+        <button onClick={onBack} className="p-0.5 rounded hover:bg-slate-700 transition-colors shrink-0">
+          <ChevronLeft className="w-3.5 h-3.5 text-slate-400" />
+        </button>
+        <Icon className={clsx('w-3.5 h-3.5 shrink-0', def.accent.text)} />
+        <div className="flex-1 min-w-0">
+          <div className={clsx('text-[10px] font-bold uppercase tracking-wider truncate', def.accent.text)}>{def.name}</div>
+          <div className="text-[9px] text-slate-600">{def.model}</div>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto">
+        {agentId === 'email'    && <EmailDetail    c={c} />}
+        {agentId === 'payment'  && <PaymentDetail  c={c} />}
+        {agentId === 'identity' && <IdentityDetail c={c} />}
+        {agentId === 'graph'    && <GraphDetail    c={c} />}
+        {agentId === 'intel'    && <IntelDetail    c={c} />}
+      </div>
+    </div>
+  )
 }
 
 // ── Email panel (middle top) ──────────────────────────────────────────────────
@@ -214,68 +371,38 @@ function EmailPanel({ c, activeEntities, activePhrases }: {
   activePhrases: { type: 'urgency' | 'secrecy' | 'override'; text: string }[]
 }) {
   const { email: e, externalIntel: ei } = c
-
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* Email header */}
       <div className="px-4 py-2.5 border-b border-slate-800 bg-slate-900 shrink-0">
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-2.5">
           <Mail className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0 space-y-0.5">
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-bold text-slate-100 truncate mb-0.5">{e.subject}</div>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-bold text-slate-100 truncate">{e.subject}</span>
-            </div>
-            <div className="flex items-center gap-3 flex-wrap">
-              <span className="text-[11px] text-slate-400">
-                From <span className={clsx('font-mono', ei.emailDomainIsLookalike ? 'text-red-400' : 'text-slate-300')}>{e.senderAddress}</span>
-              </span>
+              <span className="text-[11px] text-slate-400">From <span className={clsx('font-mono', ei.emailDomainIsLookalike ? 'text-red-400' : 'text-slate-300')}>{e.senderAddress}</span></span>
               <span className="text-[11px] text-slate-500">{e.receivedAt}</span>
-              {ei.emailDomainIsLookalike && (
-                <span className="text-[10px] bg-red-900/50 text-red-300 border border-red-700/50 px-1.5 py-0.5 rounded font-mono">
-                  ↔ {ei.lookalikeDomain}
-                </span>
-              )}
-              {e.senderDomainAgeDays < 90 && (
-                <span className="text-[10px] bg-orange-900/50 text-orange-300 border border-orange-700/50 px-1.5 py-0.5 rounded">
-                  domain {e.senderDomainAgeDays}d old
-                </span>
-              )}
+              {ei.emailDomainIsLookalike && <span className="text-[10px] bg-red-900/50 text-red-300 border border-red-700/50 px-1.5 py-0.5 rounded font-mono">↔ {ei.lookalikeDomain}</span>}
+              {e.senderDomainAgeDays < 90 && <span className="text-[10px] bg-orange-900/50 text-orange-300 border border-orange-700/50 px-1.5 py-0.5 rounded">{e.senderDomainAgeDays}d old</span>}
             </div>
           </div>
         </div>
       </div>
-
-      {/* Email body */}
       <div className="flex-1 overflow-y-auto px-4 py-3 text-xs leading-relaxed font-mono whitespace-pre-wrap">
         {e.bodySegments.map((seg, i) => {
           if (!seg.entityType) return <span key={i} className="text-slate-400">{seg.text}</span>
-          const isActive = activeEntities.has(seg.entityType)
-          return (
-            <span
-              key={i}
-              title={seg.entityType}
-              className={clsx(
-                'rounded px-0.5 cursor-default transition-all duration-500',
-                isActive ? ENTITY_RISK[seg.entityType] : ENTITY_DIM[seg.entityType] ?? 'text-slate-500'
-              )}
-            >
-              {seg.text}
-            </span>
-          )
+          const active = activeEntities.has(seg.entityType)
+          return <span key={i} title={seg.entityType} className={clsx('rounded px-0.5 cursor-default transition-all duration-500', active ? ENTITY_RISK[seg.entityType] : ENTITY_DIM[seg.entityType] ?? 'text-slate-500')}>{seg.text}</span>
         })}
       </div>
-
-      {/* NLP signal phrases (appear progressively as Agent 1 analyzes) */}
       {activePhrases.length > 0 && (
         <div className="px-3 py-2 border-t border-slate-800 bg-slate-900/80 shrink-0">
           <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-1.5">Email agent — detected signals</div>
           <div className="flex flex-wrap gap-1.5">
             {activePhrases.map((p, i) => (
-              <span key={i} className={clsx(
-                'text-[10px] font-mono px-2 py-0.5 rounded border',
-                p.type === 'urgency'  ? 'bg-red-900/50 text-red-300 border-red-700/50' :
-                p.type === 'secrecy'  ? 'bg-purple-900/50 text-purple-300 border-purple-700/50' :
-                                        'bg-amber-900/50 text-amber-300 border-amber-700/50'
+              <span key={i} className={clsx('text-[10px] font-mono px-2 py-0.5 rounded border',
+                p.type === 'urgency' ? 'bg-red-900/50 text-red-300 border-red-700/50' :
+                p.type === 'secrecy' ? 'bg-purple-900/50 text-purple-300 border-purple-700/50' :
+                'bg-amber-900/50 text-amber-300 border-amber-700/50'
               )}>
                 {p.type === 'urgency' ? '⚡' : p.type === 'secrecy' ? '🔒' : '⚠'} {p.text.length > 35 ? p.text.slice(0, 35) + '…' : p.text}
               </span>
@@ -287,16 +414,13 @@ function EmailPanel({ c, activeEntities, activePhrases }: {
   )
 }
 
-// ── Signal card (middle bottom) ───────────────────────────────────────────────
+// ── Signal card ───────────────────────────────────────────────────────────────
 
 function SignalCard({ card, active }: { card: SCard; active: boolean }) {
   const s = SEV_CARD[card.sev]
   const Icon = card.Icon
   return (
-    <div className={clsx(
-      'rounded-xl border p-3 transition-all duration-500',
-      active ? clsx(s.border, s.bg) : 'border-slate-800 bg-slate-900/30 opacity-30'
-    )}>
+    <div className={clsx('rounded-xl border p-3 transition-all duration-500', active ? clsx(s.border, s.bg) : 'border-slate-800 bg-slate-900/30 opacity-30')}>
       <div className="flex items-start gap-2">
         <Icon className={clsx('w-3.5 h-3.5 shrink-0 mt-0.5', active ? s.icon : 'text-slate-600')} />
         <div className="flex-1 min-w-0">
@@ -310,58 +434,57 @@ function SignalCard({ card, active }: { card: SCard; active: boolean }) {
   )
 }
 
-// ── Agent row (right panel) ───────────────────────────────────────────────────
+// ── Agent row (right panel, clickable) ───────────────────────────────────────
 
-function AgentRow({ def, lines, score }: {
+function AgentRow({ def, lines, score, isSelected, onClick }: {
   def: typeof AGENTS[number]
   lines: string[]
   score: number | null
+  isSelected: boolean
+  onClick: () => void
 }) {
   const { accent } = def
   const Icon = def.icon
   const running = lines.length > 0 && score === null
   const done = score !== null
   const pct = done ? Math.round(score * 100) : 0
-  const currentLine = lines[lines.length - 1] ?? ''
 
   return (
-    <div className={clsx(
-      'rounded-xl border px-3 py-2.5 transition-all duration-300',
-      done ? accent.border + ' bg-slate-900' :
-      running ? 'border-slate-700 bg-slate-900' :
-      'border-slate-800/50 bg-slate-900/30 opacity-40'
-    )}>
+    <button
+      onClick={onClick}
+      className={clsx(
+        'w-full text-left rounded-xl border px-3 py-2.5 transition-all duration-200 cursor-pointer',
+        isSelected
+          ? clsx(accent.border, 'bg-slate-800 ring-1', accent.border.replace('border-', 'ring-'))
+          : done ? clsx(accent.border, 'bg-slate-900 hover:bg-slate-800')
+          : running ? 'border-slate-700 bg-slate-900 hover:bg-slate-800'
+          : 'border-slate-800/50 bg-slate-900/30 opacity-40 pointer-events-none'
+      )}
+    >
       <div className="flex items-center gap-2 mb-1.5">
         <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', done ? accent.dot : running ? clsx(accent.dot, 'animate-pulse') : 'bg-slate-700')} />
         <Icon className={clsx('w-3 h-3 shrink-0', accent.text)} />
         <span className={clsx('text-[11px] font-bold flex-1 truncate', accent.text)}>{def.name}</span>
-        {done && (
-          <span className={clsx('text-sm font-bold font-mono shrink-0', accent.text)}>{pct}</span>
-        )}
+        {done && <span className={clsx('text-sm font-bold font-mono shrink-0', accent.text)}>{pct}</span>}
         {running && <span className="text-[9px] text-slate-500 font-mono animate-pulse">ANALYZING</span>}
       </div>
-
-      {(running || done) && (
-        <div className="pl-5 mb-2">
-          <div className="text-[10px] font-mono text-slate-500 leading-relaxed line-clamp-2 min-h-[2.5rem]">
-            {currentLine}
-          </div>
-        </div>
-      )}
-
+      <div className="pl-5 mb-1.5 min-h-[2rem]">
+        <div className="text-[10px] font-mono text-slate-500 leading-relaxed line-clamp-2">{lines[lines.length - 1] ?? ''}</div>
+      </div>
       {done && (
         <div className="pl-5 flex items-center gap-1.5">
           <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
             <div className={clsx('h-1 rounded-full transition-all duration-700', accent.bar)} style={{ width: `${pct}%` }} />
           </div>
           <span className="text-[9px] text-slate-500 font-mono shrink-0">{pct}/100</span>
+          {isSelected && <span className={clsx('text-[9px] shrink-0 font-bold ml-1', accent.text)}>← viewing</span>}
         </div>
       )}
-    </div>
+    </button>
   )
 }
 
-// ── Ensemble score (right panel bottom) ──────────────────────────────────────
+// ── Ensemble score ────────────────────────────────────────────────────────────
 
 function EnsembleScore({ c, agentData, visible }: {
   c: BECCase
@@ -373,12 +496,10 @@ function EnsembleScore({ c, agentData, visible }: {
 
   useEffect(() => {
     if (!visible) { setDisp(0); return }
-    const target = c.anomalyScore
-    const t0 = performance.now()
+    const target = c.anomalyScore, t0 = performance.now()
     const tick = (now: number) => {
       const p = Math.min((now - t0) / 1100, 1)
-      const e = 1 - Math.pow(1 - p, 3)
-      setDisp(Math.round(e * target * 10) / 10)
+      setDisp(Math.round((1 - Math.pow(1 - p, 3)) * target * 10) / 10)
       if (p < 1) rafRef.current = requestAnimationFrame(tick)
     }
     rafRef.current = requestAnimationFrame(tick)
@@ -387,47 +508,41 @@ function EnsembleScore({ c, agentData, visible }: {
 
   if (!visible) return null
 
-  const target = c.anomalyScore
-  const col = target >= 80 ? { stroke: '#ef4444', text: 'text-red-400', label: 'CRITICAL', badge: 'bg-red-950 text-red-300 border-red-700/50' }
-    : target >= 65 ? { stroke: '#f97316', text: 'text-orange-400', label: 'HIGH',     badge: 'bg-orange-950 text-orange-300 border-orange-700/50' }
-    : target >= 45 ? { stroke: '#f59e0b', text: 'text-amber-400',  label: 'MEDIUM',   badge: 'bg-amber-950 text-amber-300 border-amber-700/50' }
-    : { stroke: '#10b981', text: 'text-emerald-400', label: 'LOW', badge: 'bg-emerald-950 text-emerald-300 border-emerald-700/50' }
+  const t = c.anomalyScore
+  const col = t>=80?{stroke:'#ef4444',text:'text-red-400',label:'CRITICAL',badge:'bg-red-950 text-red-300 border-red-700/50'}
+    :t>=65?{stroke:'#f97316',text:'text-orange-400',label:'HIGH',badge:'bg-orange-950 text-orange-300 border-orange-700/50'}
+    :t>=45?{stroke:'#f59e0b',text:'text-amber-400',label:'MEDIUM',badge:'bg-amber-950 text-amber-300 border-amber-700/50'}
+    :{stroke:'#10b981',text:'text-emerald-400',label:'LOW',badge:'bg-emerald-950 text-emerald-300 border-emerald-700/50'}
 
-  const r = 38, cx = 46, cy = 46, circ = 2 * Math.PI * r
-  const dash = circ * (1 - disp / 100)
-
+  const r=38,cx=46,cy=46,circ=2*Math.PI*r,dash=circ*(1-disp/100)
   return (
-    <div className="border-t border-slate-800 bg-slate-900/80 p-3 animate-fade-in">
-      <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-3 px-1">Orchestrator — Ensemble Score</div>
-
+    <div className="border-t border-slate-800 bg-slate-900/80 p-3">
+      <div className="text-[9px] font-bold text-slate-500 uppercase tracking-widest mb-2 px-1">Orchestrator — Ensemble Score</div>
       <div className="flex items-center gap-3 mb-3">
         <svg width="92" height="92" viewBox="0 0 92 92" className="shrink-0">
           <circle cx={cx} cy={cy} r={r} fill="none" stroke="#1e293b" strokeWidth="10" />
           <circle cx={cx} cy={cy} r={r} fill="none" stroke={col.stroke} strokeWidth="10"
             strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dash}
             transform={`rotate(-90 ${cx} ${cy})`}
-            style={{ transition: 'stroke-dashoffset 1.1s cubic-bezier(0.34,1.2,0.64,1)' }}
-          />
-          <text x={cx} y={cy - 4} textAnchor="middle" fill={col.stroke} fontSize="18" fontWeight="800" fontFamily="ui-monospace,monospace">{disp.toFixed(0)}</text>
-          <text x={cx} y={cy + 13} textAnchor="middle" fill="#475569" fontSize="9" fontFamily="ui-monospace,monospace">/100</text>
+            style={{ transition:'stroke-dashoffset 1.1s cubic-bezier(0.34,1.2,0.64,1)' }} />
+          <text x={cx} y={cy-4} textAnchor="middle" fill={col.stroke} fontSize="18" fontWeight="800" fontFamily="ui-monospace,monospace">{disp.toFixed(0)}</text>
+          <text x={cx} y={cy+13} textAnchor="middle" fill="#475569" fontSize="9" fontFamily="ui-monospace,monospace">/100</text>
         </svg>
-
         <div className="flex-1 space-y-1.5">
           {AGENTS.map(def => {
             const pct = Math.round(agentData[def.id].score * 100)
             return (
               <div key={def.id} className="flex items-center gap-1.5">
-                <span className={clsx('text-[9px] font-bold w-20 shrink-0 truncate', def.accent.text)}>{def.name.split(' ')[0]}</span>
+                <span className={clsx('text-[9px] font-bold w-16 shrink-0 truncate', def.accent.text)}>{def.name.split(' ')[0]}</span>
                 <div className="flex-1 h-1 bg-slate-800 rounded-full overflow-hidden">
-                  <div className={clsx('h-1 rounded-full', def.accent.bar)} style={{ width: `${pct}%` }} />
+                  <div className={clsx('h-1 rounded-full', def.accent.bar)} style={{ width:`${pct}%` }} />
                 </div>
-                <span className={clsx('text-[9px] font-mono w-6 text-right shrink-0', def.accent.text)}>{pct}</span>
+                <span className={clsx('text-[9px] font-mono w-5 text-right shrink-0', def.accent.text)}>{pct}</span>
               </div>
             )
           })}
         </div>
       </div>
-
       <div className="flex items-center gap-2">
         <span className={clsx('text-[10px] font-bold border rounded-full px-2.5 py-1 uppercase tracking-widest', col.badge)}>{col.label} RISK</span>
         <span className="text-[10px] text-slate-500 font-mono ml-auto">{c.status.toUpperCase()}</span>
@@ -436,13 +551,13 @@ function EnsembleScore({ c, agentData, visible }: {
   )
 }
 
-// ── Case list item ────────────────────────────────────────────────────────────
+// ── Case list row ─────────────────────────────────────────────────────────────
 
 function CaseRow({ c, selected, onSelect }: { c: BECCase; selected: boolean; onSelect: () => void }) {
-  const dot = c.severity === 'critical' ? 'bg-red-500' : c.severity === 'high' ? 'bg-orange-500' : 'bg-amber-400'
-  const txt = c.severity === 'critical' ? 'text-red-400' : c.severity === 'high' ? 'text-orange-400' : 'text-amber-400'
+  const dot = c.severity==='critical'?'bg-red-500':c.severity==='high'?'bg-orange-500':'bg-amber-400'
+  const txt = c.severity==='critical'?'text-red-400':c.severity==='high'?'text-orange-400':'text-amber-400'
   return (
-    <button onClick={onSelect} className={clsx('w-full text-left px-4 py-3 border-b border-slate-800/80 transition-all', selected ? 'bg-slate-800 border-l-2 border-l-sky-500' : 'hover:bg-slate-800/50')}>
+    <button onClick={onSelect} className={clsx('w-full text-left px-4 py-3 border-b border-slate-800/80 transition-all', selected?'bg-slate-800 border-l-2 border-l-sky-500':'hover:bg-slate-800/50')}>
       <div className="flex items-center gap-2 mb-1">
         <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', dot)} />
         <span className="font-mono text-[10px] text-slate-400 flex-1 truncate">{c.id}</span>
@@ -454,61 +569,48 @@ function CaseRow({ c, selected, onSelect }: { c: BECCase; selected: boolean; onS
   )
 }
 
-// ── Detection layout (keyed so it remounts on case change) ───────────────────
+// ── Detection layout (middle + right) ────────────────────────────────────────
 
-function DetectionLayout({ c }: { c: BECCase }) {
+function DetectionLayout({ c, selectedAgent, onAgentClick }: {
+  c: BECCase
+  selectedAgent: AgentId | null
+  onAgentClick: (id: AgentId) => void
+}) {
   const signalCards = buildSignalCards(c)
   const agentData   = computeAgentData(c)
 
-  const [agentLines,   setAgentLines]   = useState<Record<AgentId, string[]>>({ email:[], payment:[], identity:[], graph:[], intel:[] })
-  const [agentScores,  setAgentScores]  = useState<Record<AgentId, number | null>>({ email:null, payment:null, identity:null, graph:null, intel:null })
-  const [activeEnts,   setActiveEnts]   = useState<Set<string>>(new Set())
-  const [activeCards,  setActiveCards]  = useState<Set<string>>(new Set())
-  const [phrases,      setPhrases]      = useState<{ type: 'urgency'|'secrecy'|'override'; text: string }[]>([])
-  const [orchLine,     setOrchLine]     = useState('')
-  const [ensembleVis,  setEnsembleVis]  = useState(false)
+  const [agentLines,  setAgentLines]  = useState<Record<AgentId, string[]>>({ email:[],payment:[],identity:[],graph:[],intel:[] })
+  const [agentScores, setAgentScores] = useState<Record<AgentId, number | null>>({ email:null,payment:null,identity:null,graph:null,intel:null })
+  const [activeEnts,  setActiveEnts]  = useState<Set<string>>(new Set())
+  const [activeCards, setActiveCards] = useState<Set<string>>(new Set())
+  const [phrases,     setPhrases]     = useState<{ type:'urgency'|'secrecy'|'override'; text:string }[]>([])
+  const [orchLine,    setOrchLine]    = useState('')
+  const [ensembleVis, setEnsembleVis] = useState(false)
 
   useEffect(() => {
     const T: ReturnType<typeof setTimeout>[] = []
-
     T.push(setTimeout(() => setOrchLine(`Initiating BEC detection — ${c.id} · ${c.relationship.clientName} · dispatching 5 agents…`), 120))
-
     const start = 500
     AGENTS.forEach((def, ai) => {
       const data = agentData[def.id]
       const jitter = ai * 90
-
       data.lines.forEach((line, li) => {
         const t = start + jitter + li * 310
-
         T.push(setTimeout(() => setAgentLines(p => ({ ...p, [def.id]: [...p[def.id], line] })), t))
-
-        // Entity type activations
-        const entTypes = ENTITY_ACTIVATIONS[def.id]?.[li]
-        if (entTypes) T.push(setTimeout(() => setActiveEnts(p => { const n = new Set(p); entTypes.forEach(e => n.add(e)); return n }), t + 80))
-
-        // NLP phrase reveals (email agent only)
-        if (def.id === 'email' && li === 1) {
-          c.nlpAnalysis.urgencyPhrases.forEach((ph, pi) => T.push(setTimeout(() => setPhrases(p => [...p, { type:'urgency', text:ph }]), t + 100 + pi * 120)))
-          c.nlpAnalysis.secrecyPhrases.forEach((ph, pi) => T.push(setTimeout(() => setPhrases(p => [...p, { type:'secrecy', text:ph }]), t + 200 + pi * 120)))
+        const ents = ENTITY_ACTIVATIONS[def.id]?.[li]
+        if (ents) T.push(setTimeout(() => setActiveEnts(p => { const n=new Set(p); ents.forEach(e=>n.add(e)); return n }), t+80))
+        if (def.id==='email' && li===1) {
+          c.nlpAnalysis.urgencyPhrases.forEach((ph,pi) => T.push(setTimeout(()=>setPhrases(p=>[...p,{type:'urgency',text:ph}]), t+100+pi*120)))
+          c.nlpAnalysis.secrecyPhrases.forEach((ph,pi) => T.push(setTimeout(()=>setPhrases(p=>[...p,{type:'secrecy',text:ph}]), t+200+pi*120)))
+          c.nlpAnalysis.overridePhrases.forEach((ph,pi) => T.push(setTimeout(()=>setPhrases(p=>[...p,{type:'override',text:ph}]), t+350+pi*120)))
         }
-        if (def.id === 'email' && li === 1) {
-          c.nlpAnalysis.overridePhrases.forEach((ph, pi) => T.push(setTimeout(() => setPhrases(p => [...p, { type:'override', text:ph }]), t + 350 + pi * 120)))
-        }
-
-        // Signal card activations
-        signalCards.filter(sc => sc.agentId === def.id && sc.atLine === li).forEach(sc => {
-          T.push(setTimeout(() => setActiveCards(p => new Set([...p, sc.id])), t + 150))
-        })
+        signalCards.filter(sc=>sc.agentId===def.id&&sc.atLine===li).forEach(sc => T.push(setTimeout(()=>setActiveCards(p=>new Set([...p,sc.id])), t+150)))
       })
-
       const scoreAt = start + jitter + data.lines.length * 310 + 350
-      T.push(setTimeout(() => setAgentScores(p => ({ ...p, [def.id]: data.score })), scoreAt))
+      T.push(setTimeout(() => setAgentScores(p=>({...p,[def.id]:data.score})), scoreAt))
     })
-
-    const allDone = start + 90 * 4 + 5 * 310 + 350 + 500
+    const allDone = start + 90*4 + 5*310 + 350 + 500
     T.push(setTimeout(() => setEnsembleVis(true), allDone))
-
     return () => T.forEach(clearTimeout)
   }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -516,38 +618,29 @@ function DetectionLayout({ c }: { c: BECCase }) {
     <>
       {/* Middle panel */}
       <div className="flex-1 flex flex-col min-w-0 border-x border-slate-800 overflow-hidden">
-
-        {/* Case strip */}
         <div className="flex items-center gap-2 px-4 py-2 bg-slate-900 border-b border-slate-800 shrink-0">
-          <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', c.severity === 'critical' ? 'bg-red-500' : c.severity === 'high' ? 'bg-orange-500' : 'bg-amber-400')} />
+          <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', c.severity==='critical'?'bg-red-500':c.severity==='high'?'bg-orange-500':'bg-amber-400')} />
           <span className="font-mono text-[10px] text-slate-400">{c.id}</span>
           <span className="text-xs font-bold text-slate-200">{c.relationship.clientName}</span>
-          <span className="text-slate-600 text-xs">·</span>
+          <span className="text-slate-600">·</span>
           <span className="text-[11px] text-slate-400">{c.email.receivedAt}</span>
         </div>
-
-        {/* Email viewer */}
         <div className="flex-1 overflow-hidden min-h-0">
           <EmailPanel c={c} activeEntities={activeEnts} activePhrases={phrases} />
         </div>
-
-        {/* Signal cards */}
         <div className="h-56 shrink-0 border-t border-slate-800 overflow-y-auto">
-          <div className="px-3 pt-2.5 pb-1 border-b border-slate-800/60 flex items-center gap-2">
+          <div className="px-3 pt-2 pb-1 border-b border-slate-800/60 flex items-center gap-2">
             <Activity className="w-3 h-3 text-slate-500" />
-            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Risk Signals — activated by agents in real time</span>
+            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Risk signals — activated by agents in real time</span>
           </div>
           <div className="p-3 grid grid-cols-2 gap-2">
-            {signalCards.map(card => (
-              <SignalCard key={card.id} card={card} active={activeCards.has(card.id)} />
-            ))}
+            {signalCards.map(card => <SignalCard key={card.id} card={card} active={activeCards.has(card.id)} />)}
           </div>
         </div>
       </div>
 
       {/* Right panel */}
-      <div className="w-72 shrink-0 flex flex-col overflow-hidden">
-        {/* Orchestrator line */}
+      <div className="w-72 shrink-0 flex flex-col overflow-hidden border-l border-slate-800">
         {orchLine && (
           <div className="px-3 py-2 border-b border-slate-800 bg-slate-900 shrink-0">
             <div className="flex items-center gap-1.5 mb-1">
@@ -557,8 +650,9 @@ function DetectionLayout({ c }: { c: BECCase }) {
             <div className="text-[10px] font-mono text-slate-400 leading-relaxed pl-4">{orchLine}</div>
           </div>
         )}
-
-        {/* Agent rows */}
+        <div className="px-3 pt-1.5 pb-1 border-b border-slate-800/60">
+          <span className="text-[9px] text-slate-600">Click an agent to view its data in the left panel</span>
+        </div>
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {AGENTS.map(def => (
             <AgentRow
@@ -566,11 +660,11 @@ function DetectionLayout({ c }: { c: BECCase }) {
               def={def}
               lines={agentLines[def.id]}
               score={agentScores[def.id]}
+              isSelected={selectedAgent === def.id}
+              onClick={() => onAgentClick(def.id)}
             />
           ))}
         </div>
-
-        {/* Ensemble */}
         <EnsembleScore c={c} agentData={agentData} visible={ensembleVis} />
       </div>
     </>
@@ -580,35 +674,46 @@ function DetectionLayout({ c }: { c: BECCase }) {
 // ── Main export ───────────────────────────────────────────────────────────────
 
 export function InvestigationHub() {
-  const [selected, setSelected] = useState<BECCase | null>(null)
+  const [selected,  setSelected]  = useState<BECCase | null>(null)
+  const [leftView,  setLeftView]  = useState<'cases' | AgentId>('cases')
+
+  const handleSelect = (c: BECCase) => { setSelected(c); setLeftView('cases') }
 
   return (
     <div className="flex-1 flex overflow-hidden bg-slate-950">
 
-      {/* Left: case list */}
-      <div className="w-52 shrink-0 bg-slate-900 border-r border-slate-800 overflow-y-auto flex flex-col">
-        <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2 shrink-0">
-          <Cpu className="w-3.5 h-3.5 text-sky-400" />
-          <span className="text-xs font-bold text-slate-200 uppercase tracking-widest">Investigations</span>
+      {/* Left panel — case list OR agent detail */}
+      {leftView === 'cases' || !selected ? (
+        <div className="w-52 shrink-0 bg-slate-900 border-r border-slate-800 overflow-y-auto flex flex-col">
+          <div className="px-4 py-3 border-b border-slate-800 flex items-center gap-2 shrink-0">
+            <Cpu className="w-3.5 h-3.5 text-sky-400" />
+            <span className="text-xs font-bold text-slate-200 uppercase tracking-widest">Investigations</span>
+          </div>
+          {BEC_CASES.map(c => (
+            <CaseRow key={c.id} c={c} selected={selected?.id===c.id} onSelect={() => handleSelect(c)} />
+          ))}
         </div>
-        {BEC_CASES.map(c => (
-          <CaseRow key={c.id} c={c} selected={selected?.id === c.id} onSelect={() => setSelected(c)} />
-        ))}
-      </div>
+      ) : (
+        <AgentDetailPanel agentId={leftView} c={selected} onBack={() => setLeftView('cases')} />
+      )}
 
-      {/* Detection area (remounts on case change via key) */}
+      {/* Middle + right */}
       {selected ? (
-        <DetectionLayout key={selected.id} c={selected} />
+        <DetectionLayout
+          key={selected.id}
+          c={selected}
+          selectedAgent={leftView !== 'cases' ? leftView : null}
+          onAgentClick={(id) => setLeftView(prev => prev === id ? 'cases' : id)}
+        />
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-8">
           <div className="w-14 h-14 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center">
             <Cpu className="w-7 h-7 text-slate-700" />
           </div>
           <div className="text-sm font-semibold text-slate-500">Select a case to begin</div>
-          <div className="text-xs text-slate-600 max-w-xs">5 specialist agents will analyse the email, payment instruction, identity, relationship graph, and external intelligence in real time</div>
+          <div className="text-xs text-slate-600 max-w-xs">5 specialist agents analyse email, payment, identity, relationship graph and external intel in real time</div>
         </div>
       )}
-
     </div>
   )
 }
