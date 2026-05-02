@@ -10,14 +10,14 @@ import type { BECCase } from '../types'
 // ── Source system definitions ─────────────────────────────────────────────────
 
 const SOURCES = [
-  { id: 'wire',     name: 'Wire Processing',       color: 'blue',   cats: [1] },
-  { id: 'core',     name: 'Core Banking',           color: 'indigo', cats: [1] },
-  { id: 'swift',    name: 'SWIFT Network',          color: 'violet', cats: [1, 5] },
-  { id: 'crm',      name: 'CRM',                    color: 'purple', cats: [2, 3] },
-  { id: 'txdb',     name: 'Transaction History DB', color: 'fuchsia',cats: [2] },
-  { id: 'email',    name: 'Email Gateway / MTA',    color: 'pink',   cats: [3] },
-  { id: 'nlp',      name: 'NLP Engine',             color: 'rose',   cats: [3] },
-  { id: 'domain',   name: 'Domain Intelligence',    color: 'orange', cats: [3, 5] },
+  { id: 'wire',     name: 'Wire Processing',       color: 'blue',   cats: [2] },
+  { id: 'core',     name: 'Core Banking',           color: 'indigo', cats: [2] },
+  { id: 'swift',    name: 'SWIFT Network',          color: 'violet', cats: [2, 5] },
+  { id: 'crm',      name: 'CRM',                    color: 'purple', cats: [1, 3] },
+  { id: 'txdb',     name: 'Transaction History DB', color: 'fuchsia',cats: [3] },
+  { id: 'email',    name: 'Email Gateway / MTA',    color: 'pink',   cats: [1] },
+  { id: 'nlp',      name: 'NLP Engine',             color: 'rose',   cats: [1] },
+  { id: 'domain',   name: 'Domain Intelligence',    color: 'orange', cats: [1, 5] },
   { id: 'iam',      name: 'IAM / Active Directory', color: 'amber',  cats: [4] },
   { id: 'siem',     name: 'SIEM',                   color: 'yellow', cats: [4] },
   { id: 'ip',       name: 'IP Reputation',          color: 'lime',   cats: [4, 5] },
@@ -489,9 +489,9 @@ function CaseListItem({ c, isSelected, onSelect }: { c: BECCase; isSelected: boo
 // ── Main Component ────────────────────────────────────────────────────────────
 
 const TABS: { label: string; cat: number; icon: React.ReactNode }[] = [
-  { label: 'Payment Instruction',      cat: 1, icon: <FileText className="w-3.5 h-3.5" /> },
-  { label: 'Counterparty History',     cat: 2, icon: <Globe className="w-3.5 h-3.5" /> },
-  { label: 'Email & Communications',   cat: 3, icon: <Mail className="w-3.5 h-3.5" /> },
+  { label: 'Email & Communications',   cat: 1, icon: <Mail className="w-3.5 h-3.5" /> },
+  { label: 'Payment Instruction',      cat: 2, icon: <FileText className="w-3.5 h-3.5" /> },
+  { label: 'Counterparty History',     cat: 3, icon: <Globe className="w-3.5 h-3.5" /> },
   { label: 'Identity & Access',        cat: 4, icon: <User className="w-3.5 h-3.5" /> },
   { label: 'External Intelligence',    cat: 5, icon: <Shield className="w-3.5 h-3.5" /> },
   { label: 'Outcome & Feedback',       cat: 6, icon: <Database className="w-3.5 h-3.5" /> },
@@ -499,7 +499,7 @@ const TABS: { label: string; cat: number; icon: React.ReactNode }[] = [
 
 export function DataExplorer() {
   const [selected, setSelected] = useState<BECCase>(BEC_CASES[0])
-  const [activeTab, setActiveTab] = useState(3)
+  const [activeTab, setActiveTab] = useState(1)
   const [search, setSearch] = useState('')
 
   const filtered = BEC_CASES.filter(c =>
@@ -585,9 +585,9 @@ export function DataExplorer() {
 
           {/* Tab content */}
           <div className="flex-1 overflow-y-auto p-5">
-            {activeTab === 1 && <InstructionTab c={selected} />}
-            {activeTab === 2 && <RelationshipTab c={selected} />}
-            {activeTab === 3 && <EmailTab c={selected} />}
+            {activeTab === 1 && <EmailTab c={selected} />}
+            {activeTab === 2 && <InstructionTab c={selected} />}
+            {activeTab === 3 && <RelationshipTab c={selected} />}
             {activeTab === 4 && <IdentityTab c={selected} />}
             {activeTab === 5 && <ExternalTab c={selected} />}
             {activeTab === 6 && <OutcomeTab c={selected} />}
