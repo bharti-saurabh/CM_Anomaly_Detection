@@ -1,4 +1,4 @@
-import { ComposedChart, Bar, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import clsx from 'clsx'
 import { AGENTS } from '../data/agents'
 import { TIME_SERIES } from '../data/timeSeries'
@@ -280,117 +280,107 @@ export function Overview() {
           </div>
         </div>
 
-        {/* 30-Day Anomaly Timeline */}
+        {/* 30-Day Trigger Activity Timeline */}
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-5 pt-5 pb-4 border-b border-gray-100">
             <div className="flex items-start justify-between">
               <div>
-                <h2 className="text-sm font-semibold text-gray-700">30-Day Anomaly Timeline</h2>
+                <h2 className="text-sm font-semibold text-gray-700">30-Day Trigger Activity Timeline</h2>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  Daily transaction volume (bars) overlaid with ensemble anomaly score (line) — Apr 02 to May 01, 2026
+                  Daily trigger firings by severity · Day 30 = Today (14 total = matches KPI above) · Apr 02 – May 01, 2026
                 </p>
               </div>
               <div className="flex items-center gap-4 text-[11px] text-gray-400 shrink-0 ml-6">
-                <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-2.5 rounded-sm bg-blue-100 border border-blue-200" /> Daily volume</span>
-                <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-0.5 bg-red-400" /> Anomaly score</span>
-                <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-0" style={{ borderTop: '1.5px dashed #fb923c' }} /> Warning (40)</span>
-                <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-0" style={{ borderTop: '1.5px dashed #ef4444' }} /> Critical (75)</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-500" /> Critical</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-orange-400" /> High</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-2.5 h-2.5 rounded-sm bg-slate-400" /> Medium</span>
               </div>
             </div>
           </div>
+
           <div className="px-5 pt-4 pb-2">
             <ResponsiveContainer width="100%" height={200}>
-              <ComposedChart data={TIME_SERIES} margin={{ top: 8, right: 16, bottom: 0, left: -10 }}>
-                <defs>
-                  <linearGradient id="scoreGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#ef4444" stopOpacity={0.18} />
-                    <stop offset="100%" stopColor="#ef4444" stopOpacity={0.02} />
-                  </linearGradient>
-                </defs>
+              <BarChart data={TIME_SERIES} margin={{ top: 12, right: 16, bottom: 0, left: -10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f8fafc" vertical={false} />
                 <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} interval={4} />
-                <YAxis yAxisId="left" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} width={28} />
-                <YAxis yAxisId="right" orientation="right" domain={[0, 100]} tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} width={28} />
+                <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} width={24} allowDecimals={false} />
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null
-                    const vol   = payload.find(p => p.dataKey === 'volume')?.value as number | undefined
-                    const score = payload.find(p => p.dataKey === 'avgScore')?.value as number | undefined
-                    const count = payload.find(p => p.dataKey === 'anomalyCount')?.value as number | undefined
+                    const crit = payload.find(p => p.dataKey === 'critical')?.value as number ?? 0
+                    const high = payload.find(p => p.dataKey === 'high')?.value as number ?? 0
+                    const med  = payload.find(p => p.dataKey === 'medium')?.value as number ?? 0
+                    const total = crit + high + med
                     const isToday = label === 'May 01'
                     return (
                       <div className="bg-white border border-gray-200 rounded-xl shadow-lg px-3.5 py-3 text-xs min-w-[160px]">
                         <div className="font-bold text-gray-800 mb-2">{label}{isToday ? ' — Today' : ''}</div>
-                        <div className="space-y-1">
-                          <div className="flex justify-between gap-4">
-                            <span className="text-gray-400">Transaction volume</span>
-                            <span className="font-mono font-semibold text-blue-600">{vol}</span>
-                          </div>
-                          <div className="flex justify-between gap-4">
-                            <span className="text-gray-400">Anomaly score</span>
-                            <span className={clsx('font-mono font-bold', score !== undefined && score >= 75 ? 'text-red-600' : score !== undefined && score >= 40 ? 'text-orange-600' : 'text-gray-600')}>{score}</span>
-                          </div>
-                          <div className="flex justify-between gap-4">
-                            <span className="text-gray-400">Cases flagged</span>
-                            <span className="font-mono font-semibold text-gray-700">{count}</span>
-                          </div>
-                          {isToday && (
-                            <div className="mt-2 pt-2 border-t border-gray-100 text-[10px] text-red-600 font-semibold">
-                              TR-8842 · CU-4419 · PR-9102
+                        {total === 0 ? (
+                          <div className="text-gray-400">No triggers</div>
+                        ) : (
+                          <div className="space-y-1">
+                            {crit > 0 && <div className="flex justify-between gap-4"><span className="text-red-500 font-semibold">Critical</span><span className="font-mono font-bold text-red-600">{crit}</span></div>}
+                            {high > 0 && <div className="flex justify-between gap-4"><span className="text-orange-500 font-semibold">High</span><span className="font-mono font-bold text-orange-600">{high}</span></div>}
+                            {med  > 0 && <div className="flex justify-between gap-4"><span className="text-slate-500 font-semibold">Medium</span><span className="font-mono font-bold text-slate-600">{med}</span></div>}
+                            <div className="flex justify-between gap-4 pt-1 border-t border-gray-100">
+                              <span className="text-gray-500 font-semibold">Total</span>
+                              <span className="font-mono font-bold text-gray-800">{total}</span>
                             </div>
-                          )}
-                        </div>
+                            {isToday && (
+                              <div className="mt-1 pt-1 border-t border-gray-100 text-[10px] text-red-600 font-semibold">
+                                TR-8842 · CU-4419 · PR-9102
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )
                   }}
                 />
-                <Bar yAxisId="left" dataKey="volume" fill="#dbeafe" stroke="#bfdbfe" strokeWidth={0.5} radius={[2, 2, 0, 0]} />
-                <ReferenceLine yAxisId="right" y={40} stroke="#fb923c" strokeDasharray="4 3" strokeWidth={1.5}
-                  label={{ value: 'Warning', position: 'insideTopRight', fontSize: 9, fill: '#fb923c', fontWeight: 700, dy: -2 }} />
-                <ReferenceLine yAxisId="right" y={75} stroke="#ef4444" strokeDasharray="4 3" strokeWidth={1.5}
-                  label={{ value: 'Critical', position: 'insideTopRight', fontSize: 9, fill: '#ef4444', fontWeight: 700, dy: -2 }} />
-                <ReferenceLine yAxisId="left" x="May 01" stroke="#ef4444" strokeWidth={1.5} strokeOpacity={0.5} />
-                <Area yAxisId="right" type="monotone" dataKey="avgScore" stroke="#ef4444" strokeWidth={2} fill="url(#scoreGrad)"
-                  dot={(props: { cx: number; cy: number; payload: { date: string } }) =>
-                    props.payload.date === 'May 01'
-                      ? <circle key="dot-today" cx={props.cx} cy={props.cy} r={5} fill="#ef4444" stroke="#fff" strokeWidth={2} />
-                      : <g key={`empty-${props.cx}`} />
-                  }
-                  activeDot={{ r: 4, fill: '#ef4444', stroke: '#fff', strokeWidth: 2 }}
+                <ReferenceLine x="May 01" stroke="#ef4444" strokeWidth={1.5} strokeOpacity={0.4}
+                  label={{ value: 'Today · 14', position: 'insideTopLeft', fontSize: 9, fill: '#ef4444', fontWeight: 700, dx: 4, dy: -8 }}
                 />
-              </ComposedChart>
+                <Bar dataKey="critical" stackId="a" name="Critical" fill="#ef4444" />
+                <Bar dataKey="high"     stackId="a" name="High"     fill="#f97316" />
+                <Bar dataKey="medium"   stackId="a" name="Medium"   fill="#94a3b8" radius={[2, 2, 0, 0]} />
+              </BarChart>
             </ResponsiveContainer>
           </div>
-          {/* Narrative strip */}
-          <div className="mx-5 mb-5 mt-1 rounded-xl border border-gray-100 bg-gray-50 divide-y divide-gray-100">
-            <div className="px-4 py-3 grid grid-cols-4 gap-3 text-[11px]">
-              <div>
-                <div className="font-bold text-gray-500 mb-0.5">Apr 02–14 · Baseline</div>
-                <div className="text-gray-400">Avg score 8 · 0–1 flags/day · all 5 pipeline layers operating normally</div>
-              </div>
-              <div>
-                <div className="font-bold text-amber-600 mb-0.5">Apr 15–20 · First Signals</div>
-                <div className="text-gray-400">Score 14–21 · isolated blips; Layer 2 NLP + velocity agents raised low-priority alerts</div>
-              </div>
-              <div>
-                <div className="font-bold text-orange-600 mb-0.5">Apr 21–30 · Escalation</div>
-                <div className="text-gray-400">Score 23→69 · 10-day trend crossing warning threshold (40) on Apr 25; 5–8 flags/day</div>
-              </div>
-              <div className="flex flex-col">
-                <div className="font-bold text-red-600 mb-0.5">May 01 · Critical Spike</div>
-                <div className="text-gray-400 mb-2">Score 89 · 13 flags · 3 high-value cases escalated</div>
-                <div className="flex flex-wrap gap-1 mt-auto">
-                  {[
-                    { id: 'TR-8842', color: 'bg-red-50 text-red-700 border-red-200' },
-                    { id: 'CU-4419', color: 'bg-orange-50 text-orange-700 border-orange-200' },
-                    { id: 'PR-9102', color: 'bg-orange-50 text-orange-700 border-orange-200' },
-                  ].map(c => (
-                    <span key={c.id} className={clsx('text-[10px] font-bold px-1.5 py-0.5 rounded-md border', c.color)}>
-                      {c.id}
-                    </span>
-                  ))}
+
+          {/* AFRS-style interpretation guide */}
+          <div className="mx-5 mb-5 mt-2 bg-slate-50 border border-slate-200 rounded-xl p-4">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">📊 Chart Interpretation Guide</p>
+            <div className="divide-y divide-slate-200">
+              {[
+                {
+                  icon: '📅',
+                  title: 'Apr 07 — Domain Spoofing Spike (3 triggers)',
+                  detail: 'First coordinated BEC attempt: domain nexus-institutional.com.cn registered 17 days prior targeting nexusinstitutional.com. Two High + one Medium trigger fired at Layer 2. All blocked. Wire of $3.8M held pending correspondent banking review.',
+                },
+                {
+                  icon: '🚨',
+                  title: 'Apr 17 — Critical Alert (5 triggers, 1 Critical)',
+                  detail: 'CEO impersonation targeting Garrison Capital Holdings ($8.7M Cayman wire). Domain registered 5 days prior. FinCEN 314(b) match on beneficiary account. MFA bypassed — login from Nassau, Bahamas (expected Houston). Highest-confidence block to date. FBI referral made.',
+                },
+                {
+                  icon: '📈',
+                  title: 'Apr 23–30 — Sustained Escalation (4–8 triggers/day)',
+                  detail: 'Multi-wave attack pattern: legal settlement impersonation (Apr 23, $5.1M), vendor account-change fraud (Apr 26, $890K), and M&A domain spoofing (Apr 29, $2.3M). Volume increasing from 4 to 8 triggers/day over 7 days. Attacks accelerating.',
+                },
+                {
+                  icon: '🔴',
+                  title: 'May 01 — Critical Surge (14 triggers · 4 Critical · 6 High · 4 Medium)',
+                  detail: 'Three simultaneous high-value attacks: TR-8842 ($14.5M BEC CEO wire), CU-4419 (MT542 dormancy wakeup), PR-9102 (synthetic ID ring at RIA node). 14 total triggers = matches Active Triggers KPI above. All held before Layer 4 — no payments executed.',
+                },
+              ].map((ev, i, arr) => (
+                <div key={i} className={clsx('flex gap-3 py-3', i === arr.length - 1 ? '' : '')}>
+                  <span className="text-base shrink-0 mt-0.5">{ev.icon}</span>
+                  <div>
+                    <div className="text-[11px] font-bold text-slate-700 mb-1">{ev.title}</div>
+                    <div className="text-[10px] text-slate-500 leading-relaxed">{ev.detail}</div>
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>

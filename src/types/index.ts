@@ -101,6 +101,9 @@ export interface TimeSeriesPoint {
   volume: number
   anomalyCount: number
   avgScore: number
+  critical?: number
+  high?: number
+  medium?: number
 }
 
 // ── Agents ────────────────────────────────────────────────────────────────────
