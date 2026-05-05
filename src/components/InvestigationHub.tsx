@@ -729,10 +729,25 @@ function EnsembleScore({ c, agentData, visible }: {
           })}
         </div>
       </div>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 mb-3">
         <span className={clsx('text-[10px] font-bold border rounded-full px-2.5 py-1 uppercase tracking-widest', col.badge)}>{col.label} RISK</span>
         <span className="text-[10px] text-gray-400 font-mono ml-auto">{c.status.toUpperCase()}</span>
       </div>
+
+      {/* Risk flags + investigator summary */}
+      {c.riskFlags.length > 0 && (
+        <div className="pt-2.5 border-t border-gray-200">
+          <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Why this is risky</div>
+          <div className="flex flex-wrap gap-1 mb-2">
+            {c.riskFlags.map((f, i) => (
+              <span key={i} className="text-[9px] px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded font-medium leading-relaxed">
+                {f}
+              </span>
+            ))}
+          </div>
+          <p className="text-[10px] text-gray-500 leading-relaxed">{c.outcome.investigatorNotes}</p>
+        </div>
+      )}
     </div>
   )
 }
@@ -779,23 +794,23 @@ function DetectionLayout({ c, selectedAgent, onAgentClick }: {
     const start = 500
     AGENTS.forEach((def, ai) => {
       const data = agentData[def.id]
-      const jitter = ai * 90
+      const jitter = ai * 400
       data.lines.forEach((line, li) => {
-        const t = start + jitter + li * 310
+        const t = start + jitter + li * 600
         T.push(setTimeout(() => setAgentLines(p => ({ ...p, [def.id]: [...p[def.id], line] })), t))
         const ents = ENTITY_ACTIVATIONS[def.id]?.[li]
         if (ents) T.push(setTimeout(() => setActiveEnts(p => { const n=new Set(p); ents.forEach(e=>n.add(e)); return n }), t+80))
         if (def.id==='email' && li===1) {
-          c.nlpAnalysis.urgencyPhrases.forEach((ph,pi) => T.push(setTimeout(()=>setPhrases(p=>[...p,{type:'urgency',text:ph}]), t+100+pi*120)))
-          c.nlpAnalysis.secrecyPhrases.forEach((ph,pi) => T.push(setTimeout(()=>setPhrases(p=>[...p,{type:'secrecy',text:ph}]), t+200+pi*120)))
-          c.nlpAnalysis.overridePhrases.forEach((ph,pi) => T.push(setTimeout(()=>setPhrases(p=>[...p,{type:'override',text:ph}]), t+350+pi*120)))
+          c.nlpAnalysis.urgencyPhrases.forEach((ph,pi) => T.push(setTimeout(()=>setPhrases(p=>[...p,{type:'urgency',text:ph}]), t+100+pi*180)))
+          c.nlpAnalysis.secrecyPhrases.forEach((ph,pi) => T.push(setTimeout(()=>setPhrases(p=>[...p,{type:'secrecy',text:ph}]), t+300+pi*180)))
+          c.nlpAnalysis.overridePhrases.forEach((ph,pi) => T.push(setTimeout(()=>setPhrases(p=>[...p,{type:'override',text:ph}]), t+500+pi*180)))
         }
-        signalCards.filter(sc=>sc.agentId===def.id&&sc.atLine===li).forEach(sc => T.push(setTimeout(()=>setActiveCards(p=>new Set([...p,sc.id])), t+150)))
+        signalCards.filter(sc=>sc.agentId===def.id&&sc.atLine===li).forEach(sc => T.push(setTimeout(()=>setActiveCards(p=>new Set([...p,sc.id])), t+200)))
       })
-      const scoreAt = start + jitter + data.lines.length * 310 + 350
+      const scoreAt = start + jitter + data.lines.length * 600 + 600
       T.push(setTimeout(() => setAgentScores(p=>({...p,[def.id]:data.score})), scoreAt))
     })
-    const allDone = start + 90*4 + 5*310 + 350 + 500
+    const allDone = start + 400*4 + 5*600 + 600 + 1200
     T.push(setTimeout(() => setEnsembleVis(true), allDone))
     return () => T.forEach(clearTimeout)
   }, [])  // eslint-disable-line react-hooks/exhaustive-deps

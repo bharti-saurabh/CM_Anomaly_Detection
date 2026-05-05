@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Mail, Database, Globe, User, Shield, FileText,
-  Server, ChevronRight,
+  Server, ChevronRight, CheckCircle, Loader2,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { BEC_CASES } from '../data/becCases'
@@ -453,6 +453,52 @@ function CaseListItem({ c, isSelected, onSelect }: { c: BECCase; isSelected: boo
   )
 }
 
+// ── Capture animation ─────────────────────────────────────────────────────────
+
+const CAPTURE_SOURCES = [
+  'Wire Processing System', 'Core Banking Ledger', 'Email Gateway / MTA',
+  'NLP Inference Engine', 'Domain Intelligence API', 'IAM / Active Directory',
+  'Transaction History DB', 'SWIFT Network Feed', 'FinCEN 314(b) Registry',
+  'IP Reputation Database', 'Sanctions Screening (OFAC)', 'CRM / Client Profile',
+]
+
+function CaptureBar({ step }: { step: number }) {
+  const done   = CAPTURE_SOURCES.slice(0, Math.max(0, step - 1))
+  const active = CAPTURE_SOURCES[step - 1]
+  const pct    = Math.round((step / CAPTURE_SOURCES.length) * 100)
+  return (
+    <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 animate-pulse-once">
+      <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Loader2 className="w-3.5 h-3.5 text-blue-500 animate-spin" />
+          <span className="text-xs font-bold text-blue-800">Ingesting from connected sources</span>
+        </div>
+        <span className="text-xs font-mono font-bold text-blue-600">{pct}%</span>
+      </div>
+      <div className="w-full bg-blue-100 rounded-full h-1 mb-3">
+        <div
+          className="h-1 rounded-full bg-blue-500 transition-all duration-150"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <div className="space-y-1 max-h-28 overflow-hidden">
+        {done.map((src, i) => (
+          <div key={i} className="flex items-center gap-2 text-[11px] text-blue-400 font-mono">
+            <CheckCircle className="w-3 h-3 text-blue-400 shrink-0" />
+            {src}
+          </div>
+        ))}
+        {active && (
+          <div className="flex items-center gap-2 text-[11px] text-blue-700 font-mono font-semibold">
+            <span className="w-3 h-3 rounded-full bg-blue-500 shrink-0 animate-pulse" />
+            {active}…
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 
 const TABS: { label: string; cat: number; icon: React.ReactNode }[] = [
@@ -464,9 +510,24 @@ const TABS: { label: string; cat: number; icon: React.ReactNode }[] = [
 ]
 
 export function DataExplorer() {
-  const [selected, setSelected] = useState<BECCase>(BEC_CASES[0])
-  const [activeTab, setActiveTab] = useState(1)
-  const [search, setSearch] = useState('')
+  const [selected, setSelected]       = useState<BECCase>(BEC_CASES[0])
+  const [activeTab, setActiveTab]     = useState(1)
+  const [search, setSearch]           = useState('')
+  const [captureStep, setCaptureStep] = useState(-1)
+
+  const capturing = captureStep >= 0 && captureStep < CAPTURE_SOURCES.length
+
+  useEffect(() => {
+    if (captureStep < 0 || captureStep >= CAPTURE_SOURCES.length) return
+    const t = setTimeout(() => setCaptureStep(s => s + 1), 130)
+    return () => clearTimeout(t)
+  }, [captureStep])
+
+  const handleSelect = (c: BECCase) => {
+    if (c.id === selected?.id) return
+    setSelected(c)
+    setCaptureStep(0)
+  }
 
   const filtered = BEC_CASES.filter(c =>
     !search ||
@@ -505,7 +566,7 @@ export function DataExplorer() {
               key={c.id}
               c={c}
               isSelected={selected?.id === c.id}
-              onSelect={() => setSelected(c)}
+              onSelect={() => handleSelect(c)}
             />
           ))}
         </div>
@@ -551,6 +612,7 @@ export function DataExplorer() {
 
           {/* Tab content */}
           <div className="flex-1 overflow-y-auto p-5">
+            {capturing && <CaptureBar step={captureStep} />}
             {activeTab === 1 && <EmailTab c={selected} />}
             {activeTab === 2 && <InstructionTab c={selected} />}
             {activeTab === 3 && <RelationshipTab c={selected} />}

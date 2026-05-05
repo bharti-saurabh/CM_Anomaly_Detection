@@ -1,8 +1,130 @@
 import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import clsx from 'clsx'
+import { Plus, X } from 'lucide-react'
 import { AGENTS } from '../data/agents'
 import type { Agent } from '../types'
+
+// ── Create Agent Modal ────────────────────────────────────────────────────────
+
+const MODEL_OPTIONS = [
+  'Claude Sonnet 4.6', 'Claude Haiku 4.5', 'Claude Opus 4.7',
+  'XGBoost Ensemble', 'BERT Classifier', 'GPT-4o', 'Custom / Other',
+]
+
+function CreateAgentModal({ onClose, onCreate }: {
+  onClose: () => void
+  onCreate: (agent: Agent) => void
+}) {
+  const [name,    setName]    = useState('')
+  const [model,   setModel]   = useState(MODEL_OPTIONS[0])
+  const [focus,   setFocus]   = useState('')
+  const [desc,    setDesc]    = useState('')
+  const [trigger, setTrigger] = useState('')
+
+  const handleSubmit = () => {
+    if (!name.trim()) return
+    const newAgent: Agent = {
+      id: `custom-${Date.now()}`,
+      name: name.trim(),
+      model,
+      description: desc.trim() || focus.trim() || 'Custom surveillance agent',
+      status: 'idle',
+      precision: 0,
+      recall: 0,
+      decisionsToday: 0,
+      lastCase: '—',
+      showInOverview: false,
+      recentDecisions: [],
+    }
+    onCreate(newAgent)
+    onClose()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-2xl w-full max-w-lg mx-4">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <div>
+            <h2 className="text-sm font-bold text-gray-900">Create New Agent</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Define a custom surveillance agent for the Vigil pipeline</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="px-6 py-5 space-y-4">
+          <div>
+            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest block mb-1.5">Agent Name *</label>
+            <input
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Cross-Border Velocity Guard"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest block mb-1.5">Model</label>
+            <select
+              value={model}
+              onChange={e => setModel(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            >
+              {MODEL_OPTIONS.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest block mb-1.5">Detection Focus</label>
+            <input
+              value={focus}
+              onChange={e => setFocus(e.target.value)}
+              placeholder="e.g. Cross-border wire velocity, structuring patterns"
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest block mb-1.5">Description</label>
+            <textarea
+              value={desc}
+              onChange={e => setDesc(e.target.value)}
+              placeholder="What does this agent do? What signals does it monitor?"
+              rows={3}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+
+          <div>
+            <label className="text-[11px] font-bold text-gray-500 uppercase tracking-widest block mb-1.5">Trigger Condition</label>
+            <textarea
+              value={trigger}
+              onChange={e => setTrigger(e.target.value)}
+              placeholder="e.g. Fire when 3+ cross-border wires exceed $500K within 60 minutes from same client"
+              rows={2}
+              className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-100">
+          <button onClick={onClose} className="text-xs font-semibold text-gray-600 bg-white border border-gray-200 px-4 py-2 rounded-lg hover:bg-gray-50 transition-colors">
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={!name.trim()}
+            className="text-xs font-semibold text-white bg-blue-600 px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Create Agent
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 // ── Agent accent colours ──────────────────────────────────────────────────────
 
@@ -64,9 +186,13 @@ function AgentCard({ agent, isSelected, onSelect }: { agent: Agent; isSelected: 
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function AgentMonitor() {
-  const [selectedId, setSelectedId] = useState<string>(AGENTS[0].id)
-  const agent  = AGENTS.find(a => a.id === selectedId) ?? AGENTS[0]
-  const accent = AGENT_ACCENT[agent.id] ?? AGENT_ACCENT['regulatory-threshold-monitor']
+  const [selectedId,    setSelectedId]    = useState<string>(AGENTS[0].id)
+  const [customAgents,  setCustomAgents]  = useState<Agent[]>([])
+  const [showModal,     setShowModal]     = useState(false)
+
+  const allAgents = [...AGENTS, ...customAgents]
+  const agent     = allAgents.find(a => a.id === selectedId) ?? AGENTS[0]
+  const accent    = AGENT_ACCENT[agent.id] ?? AGENT_ACCENT['regulatory-threshold-monitor']
 
   const chartData = [
     { name: 'Precision', value: agent.precision },
@@ -79,15 +205,27 @@ export function AgentMonitor() {
 
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50">
+      {showModal && (
+        <CreateAgentModal
+          onClose={() => setShowModal(false)}
+          onCreate={agent => { setCustomAgents(p => [...p, agent]); setSelectedId(agent.id) }}
+        />
+      )}
       <div className="p-6 max-w-6xl mx-auto space-y-6">
 
         {/* Page header */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-gray-900">Agent Monitor</h1>
-            <p className="text-xs text-gray-400 mt-0.5">Real-time status and performance for all {AGENTS.length} Vigil surveillance agents</p>
+            <p className="text-xs text-gray-400 mt-0.5">Real-time status and performance for all {allAgents.length} Vigil surveillance agents</p>
           </div>
-          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">{AGENTS.length} agents</span>
+          <button
+            onClick={() => setShowModal(true)}
+            className="flex items-center gap-1.5 text-xs font-semibold text-white bg-blue-600 px-3.5 py-2 rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Create Agent
+          </button>
         </div>
 
         {/* Front-line agents */}
@@ -115,6 +253,21 @@ export function AgentMonitor() {
             ))}
           </div>
         </div>
+
+        {/* Custom agents */}
+        {customAgents.length > 0 && (
+          <div>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Custom Agents</span>
+              <span className="text-[10px] text-gray-300">{customAgents.length} agent{customAgents.length !== 1 ? 's' : ''} · offline</span>
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              {customAgents.map(a => (
+                <AgentCard key={a.id} agent={a} isSelected={selectedId === a.id} onSelect={() => setSelectedId(a.id)} />
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Selected agent detail */}
         <div className="grid grid-cols-5 gap-4">
