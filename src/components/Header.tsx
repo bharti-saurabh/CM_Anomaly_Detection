@@ -3,6 +3,7 @@ import clsx from 'clsx'
 import type { Signal, Section } from '../types'
 
 const SECTION_LABELS: Record<Section, string> = {
+  capabilities:   'Capabilities',
   overview:       'Overview',
   explorer:       'Data Explorer',
   investigations: 'Investigations',
