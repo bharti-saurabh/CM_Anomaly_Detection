@@ -1,8 +1,9 @@
-import { LayoutDashboard, Database, ShieldAlert, Bot, Wand2 } from 'lucide-react'
+import { LayoutDashboard, Database, ShieldAlert, Bot, Wand2, Layers } from 'lucide-react'
 import clsx from 'clsx'
 import type { Section } from '../types'
 
 const NAV_ITEMS: { id: Section; icon: React.FC<{ className?: string }>; label: string }[] = [
+  { id: 'capabilities',    icon: Layers,          label: 'Capabilities'   },
   { id: 'overview',        icon: LayoutDashboard, label: 'Overview'       },
   { id: 'explorer',        icon: Database,        label: 'Data Explorer'  },
   { id: 'investigations',  icon: ShieldAlert,     label: 'Investigations' },

@@ -136,7 +136,7 @@ export interface Agent {
 
 // ── Navigation ────────────────────────────────────────────────────────────────
 
-export type Section = 'overview' | 'explorer' | 'investigations' | 'agents' | 'rules'
+export type Section = 'capabilities' | 'overview' | 'explorer' | 'investigations' | 'agents' | 'rules'
 
 // ── BEC Cases (Data Explorer) ─────────────────────────────────────────────────
 
