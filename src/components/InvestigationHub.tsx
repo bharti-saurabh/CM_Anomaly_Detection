@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Mail, CreditCard, Fingerprint, Network, ShieldCheck, Cpu,
   AlertTriangle, Globe, MapPin, Monitor, UserX, Zap, Activity,
-  Lock, Clock, Hash, ArrowUpRight,
+  Lock, Clock, Hash, ArrowUpRight, X, ChevronRight,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { BEC_CASES } from '../data/becCases'
@@ -109,12 +109,21 @@ function computeAgentData(c: BECCase): Record<AgentId, { score: number; lines: s
 
 type ALvl = 'critical' | 'high' | 'medium' | 'ok' | undefined
 
-function ARow({ label, value, lvl, mono }: { label: string; value: string; lvl?: ALvl; mono?: boolean }) {
+function ARow({ label, value, lvl, mono, onClick }: { label: string; value: string; lvl?: ALvl; mono?: boolean; onClick?: () => void }) {
   const vc = lvl === 'critical' ? 'text-red-700 bg-red-50 px-1 rounded border border-red-200 font-bold'
     : lvl === 'high'   ? 'text-orange-700 bg-orange-50 px-1 rounded border border-orange-200'
     : lvl === 'medium' ? 'text-amber-700 bg-amber-50 px-1 rounded'
     : lvl === 'ok'     ? 'text-emerald-600'
     : 'text-gray-800'
+  if (onClick) {
+    return (
+      <button onClick={onClick} className="flex items-start gap-2 py-1.5 border-b border-gray-100 last:border-0 w-full text-left hover:bg-blue-50 rounded transition-colors group px-0.5 -mx-0.5">
+        <span className="text-[10px] text-gray-400 shrink-0 w-[4.5rem] leading-relaxed">{label}</span>
+        <span className={clsx('text-[10px] flex-1 text-right leading-relaxed break-words', mono && 'font-mono', vc)}>{value}</span>
+        <ChevronRight className="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 shrink-0 mt-0.5 transition-opacity" />
+      </button>
+    )
+  }
   return (
     <div className="flex items-start gap-2 py-1.5 border-b border-gray-100 last:border-0">
       <span className="text-[10px] text-gray-400 shrink-0 w-[4.5rem] leading-relaxed">{label}</span>
@@ -126,17 +135,194 @@ function ASec({ title }: { title: string }) {
   return <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest px-3 pt-3 pb-1.5 bg-gray-50">{title}</div>
 }
 
+// ── Style-match baseline emails (contrasting samples from legitimate sender) ──
+
+function buildBaselineEmails(c: BECCase) {
+  const name  = c.email.senderName.split(' (')[0]
+  const domain = c.email.legitimateDomain
+  const addr  = `${name.split(' ')[0].toLowerCase()}.${name.split(' ').slice(-1)[0].toLowerCase()}@${domain}`
+  const client = c.relationship.clientName
+  return [
+    {
+      date: '2024-03-15', addr,
+      subject: `Q1 Payment Schedule — ${client}`,
+      body: `Hi,\n\nPlease find attached the Q1 payment schedule for your review. All amounts are consistent with our quarterly run-rate and the beneficiaries are on our approved counterparty list.\n\nKindly process at your convenience following standard dual-authorisation. Let me know if you need anything else.\n\nBest regards,\n${name}`,
+      metrics: { sentences: 3, avgLen: 19, passive: '44%', urgency: 0, override: 0, tone: 'Formal · Routine' },
+    },
+    {
+      date: '2024-02-08', addr,
+      subject: `February Wire Instruction`,
+      body: `Dear Treasury Team,\n\nCould you process the attached wire instruction for February? The beneficiary details are unchanged from last month and have been pre-approved.\n\nPlease confirm receipt when you get a chance.\n\nThanks,\n${name}`,
+      metrics: { sentences: 3, avgLen: 16, passive: '38%', urgency: 0, override: 0, tone: 'Formal · Polite' },
+    },
+    {
+      date: '2024-01-09', addr,
+      subject: `Settlement Confirmation — ${client}`,
+      body: `Hi,\n\nJust following up on last week's settlement. Could you confirm that the funds cleared on your end? Happy to provide additional documentation if required.\n\nLet me know whenever you have a moment.\n\nKind regards,\n${name}`,
+      metrics: { sentences: 3, avgLen: 14, passive: '31%', urgency: 0, override: 0, tone: 'Conversational · Neutral' },
+    },
+  ]
+}
+
+// ── Style Match Modal ─────────────────────────────────────────────────────────
+
+function StyleMatchModal({ c, onClose }: { c: BECCase; onClose: () => void }) {
+  const { nlpAnalysis: n, email: e } = c
+  const score = Math.round(n.writingStyleConsistency * 100)
+  const baselines = buildBaselineEmails(c)
+  const sevColor  = score < 40 ? 'text-red-600' : score < 60 ? 'text-orange-600' : 'text-amber-600'
+  const sevBg     = score < 40 ? 'bg-red-50 border-red-200' : score < 60 ? 'bg-orange-50 border-orange-200' : 'bg-amber-50 border-amber-200'
+
+  const metrics = [
+    { label: 'Avg sentence length', baseline: '13–19 words', current: `${n.avgSentenceLength} words`,  flag: n.avgSentenceLength < 10 || n.avgSentenceLength > 28 },
+    { label: 'Passive voice ratio',  baseline: '30–48%',      current: `${Math.round(n.passiveVoiceRatio * 100)}%`, flag: n.passiveVoiceRatio < 0.1 },
+    { label: 'Urgency phrases',      baseline: '0',           current: `${n.urgencyPhrases.length}`,   flag: n.urgencyPhrases.length > 0 },
+    { label: 'Override language',    baseline: '0',           current: `${n.overridePhrases.length}`,  flag: n.overridePhrases.length > 0 },
+    { label: 'Primary tone',         baseline: 'Formal / Neutral', current: n.primaryTone,             flag: ['Threatening','Authoritative','Urgent'].includes(n.primaryTone) },
+    { label: 'Baseline samples',     baseline: '—',           current: `${n.histStyleBaselineSamples} emails`, flag: false },
+  ]
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-[720px] max-w-[95vw] max-h-[88vh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-gray-200 flex items-start justify-between shrink-0">
+          <div>
+            <div className="text-sm font-bold text-gray-900 mb-0.5">Writing Style Baseline Analysis</div>
+            <div className="text-xs text-gray-400">
+              Why does <span className="font-mono text-red-600">{e.senderAddress}</span> score only{' '}
+              <span className={clsx('font-bold', sevColor)}>{score}%</span> against{' '}
+              <span className="font-semibold text-gray-600">{n.histStyleBaselineSamples} legitimate emails</span>?
+            </div>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-400">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          {/* Score + metrics comparison */}
+          <div className="px-5 py-4 border-b border-gray-100">
+            <div className={clsx('flex items-center gap-3 rounded-xl border p-3 mb-4', sevBg)}>
+              <div className={clsx('text-3xl font-bold font-mono', sevColor)}>{score}%</div>
+              <div>
+                <div className={clsx('text-xs font-bold', sevColor)}>
+                  {score < 40 ? 'Anomalous authorship — likely different writer' : score < 60 ? 'Significant style deviation detected' : 'Moderate style deviation'}
+                </div>
+                <div className="text-[11px] text-gray-500 mt-0.5">
+                  The model compares writing patterns (sentence length, passive voice, tone markers, vocabulary) against {n.histStyleBaselineSamples} confirmed emails from this sender.
+                </div>
+              </div>
+            </div>
+
+            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Metric Comparison</div>
+            <div className="rounded-xl border border-gray-200 overflow-hidden">
+              <div className="grid grid-cols-3 bg-gray-50 px-3 py-1.5 border-b border-gray-200 text-[9px] font-bold text-gray-400 uppercase tracking-wider">
+                <span>Metric</span><span className="text-center">Baseline (past emails)</span><span className="text-right">This email</span>
+              </div>
+              {metrics.map(m => (
+                <div key={m.label} className="grid grid-cols-3 px-3 py-2 border-b border-gray-100 last:border-0 items-center">
+                  <span className="text-[11px] text-gray-500">{m.label}</span>
+                  <span className="text-[11px] text-gray-600 text-center font-mono">{m.baseline}</span>
+                  <span className={clsx('text-[11px] font-bold font-mono text-right', m.flag ? 'text-red-600' : 'text-gray-700')}>
+                    {m.flag && <span className="mr-1 text-red-500">⚠</span>}{m.current}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Baseline email samples */}
+          <div className="px-5 py-4">
+            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">
+              Baseline Samples — Confirmed Legitimate ({n.histStyleBaselineSamples} in corpus, 3 shown)
+            </div>
+            <div className="space-y-3">
+              {baselines.map((b, i) => (
+                <div key={i} className="rounded-xl border border-emerald-200 bg-emerald-50/40 overflow-hidden">
+                  <div className="px-3 py-2 bg-emerald-50 border-b border-emerald-200 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-mono text-gray-500 mr-2">{b.date}</span>
+                      <span className="text-xs font-semibold text-gray-700">{b.subject}</span>
+                    </div>
+                    <span className="text-[9px] font-semibold text-emerald-700 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full">✓ Legitimate</span>
+                  </div>
+                  <div className="px-3 py-2 text-[10px] text-gray-500 font-mono">
+                    From: <span className="text-gray-700">{b.addr}</span>
+                  </div>
+                  <pre className="px-3 pb-3 text-[11px] text-gray-600 font-sans whitespace-pre-wrap leading-relaxed">{b.body}</pre>
+                  <div className="px-3 py-2 border-t border-emerald-200 bg-emerald-50 flex flex-wrap gap-3">
+                    {[
+                      { k: 'Avg sentence',  v: `~${b.metrics.avgLen} words` },
+                      { k: 'Passive voice', v: b.metrics.passive },
+                      { k: 'Urgency',       v: `${b.metrics.urgency} phrases` },
+                      { k: 'Override',      v: `${b.metrics.override} phrases` },
+                      { k: 'Tone',          v: b.metrics.tone },
+                    ].map(m => (
+                      <span key={m.k} className="text-[9px] text-emerald-700">
+                        <span className="font-bold">{m.k}:</span> {m.v}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Suspicious email contrast */}
+            <div className="mt-3 rounded-xl border border-red-200 bg-red-50/40 overflow-hidden">
+              <div className="px-3 py-2 bg-red-50 border-b border-red-200 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-mono text-gray-500 mr-2">{e.receivedAt}</span>
+                  <span className="text-xs font-semibold text-gray-700">{e.subject}</span>
+                </div>
+                <span className="text-[9px] font-semibold text-red-700 bg-red-100 border border-red-300 px-2 py-0.5 rounded-full">⚠ Under Investigation</span>
+              </div>
+              <div className="px-3 py-2 text-[10px] text-gray-500 font-mono">
+                From: <span className="text-red-600">{e.senderAddress}</span>
+                <span className="ml-2 text-[9px] text-red-500 font-semibold">↔ spoofs {c.externalIntel.lookalikeDomain}</span>
+              </div>
+              <div className="px-3 pb-3 pt-1 flex flex-wrap gap-3 border-t border-red-200">
+                {[
+                  { k: 'Avg sentence',  v: `${n.avgSentenceLength} words`,                           flag: n.avgSentenceLength < 10 },
+                  { k: 'Passive voice', v: `${Math.round(n.passiveVoiceRatio * 100)}%`,              flag: n.passiveVoiceRatio < 0.12 },
+                  { k: 'Urgency',       v: `${n.urgencyPhrases.length} phrases`,                     flag: true },
+                  { k: 'Override',      v: `${n.overridePhrases.length} phrases`,                    flag: n.overridePhrases.length > 0 },
+                  { k: 'Tone',          v: `${n.primaryTone} · ${n.secondaryTone}`,                  flag: true },
+                ].map(m => (
+                  <span key={m.k} className={clsx('text-[9px]', m.flag ? 'text-red-700' : 'text-gray-600')}>
+                    <span className="font-bold">{m.k}:</span> {m.flag && '⚠ '}{m.v}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-5 py-3 border-t border-gray-200 bg-gray-50 shrink-0 flex items-center justify-between">
+          <span className="text-[10px] text-gray-400">Style model trained on {n.histStyleBaselineSamples} confirmed emails · BERT embeddings + stylometric features</span>
+          <button onClick={onClose} className="text-xs font-semibold text-gray-600 bg-white border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition-colors">Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Per-agent detail views ────────────────────────────────────────────────────
 
 function EmailDetail({ c }: { c: BECCase }) {
   const { email: e, nlpAnalysis: n, externalIntel: ei } = c
+  const [showStyleModal, setShowStyleModal] = useState(false)
   return (
     <div>
+      {showStyleModal && <StyleMatchModal c={c} onClose={() => setShowStyleModal(false)} />}
       <ASec title="NLP Analysis" />
       <div className="px-3">
         <ARow label="Primary tone"  value={n.primaryTone}  />
         <ARow label="Secondary"     value={n.secondaryTone} />
-        <ARow label="Style match"   value={`${Math.round(n.writingStyleConsistency*100)}%`} lvl={n.writingStyleConsistency<.4?'critical':n.writingStyleConsistency<.6?'high':undefined} />
+        <ARow label="Style match"   value={`${Math.round(n.writingStyleConsistency*100)}%`} lvl={n.writingStyleConsistency<.4?'critical':n.writingStyleConsistency<.6?'high':undefined} onClick={() => setShowStyleModal(true)} />
         <ARow label="Baseline"      value={`${n.histStyleBaselineSamples} emails`} />
         <ARow label="Grammar errs"  value={n.grammaticalErrorCount.toString()} lvl={n.grammaticalErrorCount>2?'high':n.grammaticalErrorCount>0?'medium':undefined} />
         <ARow label="Sentiment"     value={`${n.sentimentLabel} (${n.sentiment.toFixed(2)})`} lvl={n.sentiment<-.5?'high':undefined} />
