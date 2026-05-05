@@ -1,21 +1,45 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import clsx from 'clsx'
 import { AGENTS } from '../data/agents'
 import { TIME_SERIES } from '../data/timeSeries'
 import { BEC_CASES } from '../data/becCases'
+import type { BECCase } from '../types'
 
-// ── Derived metrics ───────────────────────────────────────────────────────────
+// ── Product definitions ───────────────────────────────────────────────────────
 
-const AUTO_CLEARED   = 4
-const openCases      = BEC_CASES.filter(c => c.status === 'blocked' || c.status === 'flagged')
-const criticalCount  = openCases.filter(c => c.severity === 'critical').length
-const highCount      = openCases.filter(c => c.severity === 'high').length
-const mediumCount    = openCases.filter(c => c.severity === 'medium').length
-const totalDecisions = AGENTS.reduce((s, a) => s + a.decisionsToday, 0)
-const blockedRisk    = BEC_CASES.filter(c => c.status === 'blocked').reduce((s, c) => s + c.instruction.amount, 0)
-const sarCount       = BEC_CASES.filter(c => c.outcome.sarFiled).length
-const overviewAgents = AGENTS.filter(a => a.showInOverview)
+type ProductFilter = 'all' | 'treasury' | 'custody' | 'wealth' | 'corporate-trust' | 'clearance'
+
+const PRODUCTS: { id: ProductFilter; label: string }[] = [
+  { id: 'all',             label: 'All Products'           },
+  { id: 'treasury',        label: 'Treasury Services'      },
+  { id: 'custody',         label: 'Asset Servicing'        },
+  { id: 'corporate-trust', label: 'Corporate Trust'        },
+  { id: 'clearance',       label: 'Clearance & Collateral' },
+  { id: 'wealth',          label: 'Wealth Management'      },
+]
+
+// Infer product from case characteristics
+function inferProduct(c: BECCase): ProductFilter {
+  const id = c.id
+  if (id === 'BEC-2024-0042' || id === 'BEC-2024-0038' || id === 'BEC-2024-0031' || id === 'BEC-2024-0024' || id === 'BEC-2024-0016') return 'treasury'
+  if (id === 'BEC-2024-0027' || id === 'BEC-2024-0012') return 'corporate-trust'
+  if (id === 'BEC-2024-0019' || id === 'BEC-2024-0003') return 'wealth'
+  if (id === 'BEC-2024-0008') return 'custody'
+  // fallback: channel-based
+  if (c.instruction.channel === 'Fedwire' || c.instruction.channel === 'SWIFT') return 'treasury'
+  return 'treasury'
+}
+
+// Proportion of triggers per product (for chart scaling)
+const PRODUCT_SCALE: Record<ProductFilter, number> = {
+  all:             1.00,
+  treasury:        0.50,
+  'corporate-trust': 0.20,
+  wealth:          0.20,
+  custody:         0.10,
+  clearance:       0.00,
+}
 
 // ── Agent accent colours ──────────────────────────────────────────────────────
 
@@ -28,18 +52,8 @@ const AGENT_ACCENT: Record<string, { dot: string; text: string; bg: string; bar:
   'velocity-monitor':         { dot: 'bg-orange-500', text: 'text-orange-600', bg: 'bg-orange-50', bar: 'bg-orange-500', border: 'border-orange-200' },
 }
 
-// ── Product definitions ───────────────────────────────────────────────────────
-
-type ProductFilter = 'all' | 'treasury' | 'custody' | 'wealth' | 'corporate-trust' | 'clearance'
-
-const PRODUCTS: { id: ProductFilter; label: string }[] = [
-  { id: 'all',           label: 'All Products'            },
-  { id: 'treasury',      label: 'Treasury Services'       },
-  { id: 'custody',       label: 'Asset Servicing'         },
-  { id: 'corporate-trust', label: 'Corporate Trust'       },
-  { id: 'clearance',     label: 'Clearance & Collateral'  },
-  { id: 'wealth',        label: 'Wealth Management'       },
-]
+const overviewAgents = AGENTS.filter(a => a.showInOverview)
+const AUTO_CLEARED   = 4
 
 // ── Alert queue with product tags ─────────────────────────────────────────────
 
@@ -48,82 +62,110 @@ const ALERT_QUEUE_ALL = [
     id: BEC_CASES[0].signalId ?? BEC_CASES[0].id,
     client: BEC_CASES[0].relationship.clientName,
     subject: `CRITICAL: $${(BEC_CASES[0].instruction.amount / 1_000_000).toFixed(1)}M Wire Hold — BEC / CEO Impersonation [${BEC_CASES[0].signalId ?? BEC_CASES[0].id}]`,
-    preview: `Domain ${BEC_CASES[0].email.senderAddress} proximate to ${BEC_CASES[0].email.legitimateDomain} (age ${BEC_CASES[0].email.senderDomainAgeDays}d). NLP score ${BEC_CASES[0].nlpAnalysis.urgencyPhrases.length * 23}. Self-approved. SAR filed.`,
-    time: BEC_CASES[0].createdAt.slice(11),
-    to: 'Head of Risk + FCC Lead',
-    sev: 'critical' as const,
-    product: 'treasury' as ProductFilter,
+    preview: `Domain ${BEC_CASES[0].email.senderAddress} proximate to ${BEC_CASES[0].email.legitimateDomain} (age ${BEC_CASES[0].email.senderDomainAgeDays}d). Style match ${Math.round(BEC_CASES[0].nlpAnalysis.writingStyleConsistency * 100)}%. Self-approved. SAR filed.`,
+    time: BEC_CASES[0].createdAt.slice(11), to: 'Head of Risk + FCC Lead',
+    sev: 'critical' as const, product: 'treasury' as ProductFilter,
     tags: ['Auto-Generated', 'Layer 2', 'SAR Filed'],
   },
   {
     id: BEC_CASES[5].id,
     client: BEC_CASES[5].relationship.clientName,
     subject: `CRITICAL: $${(BEC_CASES[5].instruction.amount / 1_000_000).toFixed(1)}M Cayman Wire — FinCEN Match + SWIFT Controls Flag [${BEC_CASES[5].id}]`,
-    preview: `Domain ${BEC_CASES[5].email.senderAddress} (${BEC_CASES[5].email.senderDomainAgeDays}d old). MFA bypassed. Login from ${BEC_CASES[5].identity.loginLocation} (expected ${BEC_CASES[5].identity.expectedLocation}). FinCEN 314(b) match on beneficiary.`,
-    time: BEC_CASES[5].createdAt.slice(11),
-    to: 'Financial Crimes + Legal',
-    sev: 'critical' as const,
-    product: 'custody' as ProductFilter,
+    preview: `Domain ${BEC_CASES[5].email.senderAddress} (${BEC_CASES[5].email.senderDomainAgeDays}d old). MFA bypassed. Login from ${BEC_CASES[5].identity.loginLocation} (expected ${BEC_CASES[5].identity.expectedLocation}).`,
+    time: BEC_CASES[5].createdAt.slice(11), to: 'Financial Crimes + Legal',
+    sev: 'critical' as const, product: 'wealth' as ProductFilter,
     tags: ['FinCEN Match', 'Layer 2', 'FBI Referral'],
   },
   {
     id: BEC_CASES[1].id,
     client: BEC_CASES[1].relationship.clientName,
     subject: `HIGH: $${(BEC_CASES[1].instruction.amount / 1_000_000).toFixed(1)}M M&A Settlement — Domain Spoofing Detected [${BEC_CASES[1].id}]`,
-    preview: `From ${BEC_CASES[1].email.senderAddress} (expected ${BEC_CASES[1].email.legitimateDomain}). Domain ${BEC_CASES[1].email.senderDomainAgeDays}d old. SWIFT Controls flagged. Correspondent banking review initiated.`,
-    time: BEC_CASES[1].createdAt.slice(11),
-    to: 'Arjun K. (Analyst)',
-    sev: 'high' as const,
-    product: 'treasury' as ProductFilter,
+    preview: `From ${BEC_CASES[1].email.senderAddress} (expected ${BEC_CASES[1].email.legitimateDomain}). Domain ${BEC_CASES[1].email.senderDomainAgeDays}d old. SWIFT Controls flagged.`,
+    time: BEC_CASES[1].createdAt.slice(11), to: 'Arjun K. (Analyst)',
+    sev: 'high' as const, product: 'treasury' as ProductFilter,
     tags: ['Domain Alert', 'Case Pre-Loaded'],
   },
   {
-    id: BEC_CASES[3]?.id ?? 'BEC-2024-0031',
-    client: BEC_CASES[3]?.relationship.clientName ?? 'Thornfield Asset Management',
-    subject: `HIGH: $890K Vendor Account Change — Payroll Redirect Pattern`,
-    preview: `Vendor banking details changed 48h before payroll run. New account in jurisdiction outside client baseline. Maker-checker segregation bypassed.`,
-    time: '14:22:08',
-    to: 'Operations Risk',
-    sev: 'high' as const,
-    product: 'wealth' as ProductFilter,
+    id: 'BEC-2024-0012',
+    client: 'Clearwater Trust',
+    subject: 'HIGH: $890K Vendor Account Change — Real Estate Wire Pattern',
+    preview: 'Vendor banking details changed 48h before settlement. New beneficiary in jurisdiction outside client baseline. Maker-checker bypass detected.',
+    time: '14:22:08', to: 'Operations Risk',
+    sev: 'high' as const, product: 'corporate-trust' as ProductFilter,
     tags: ['Vendor Fraud', 'Layer 3'],
   },
 ]
 
+// ── Main component ────────────────────────────────────────────────────────────
+
 export function Overview() {
   const [activeProduct, setActiveProduct] = useState<ProductFilter>('all')
+
+  // All metrics are reactive to the active product filter
+  const filteredCases = useMemo(() =>
+    activeProduct === 'all' ? BEC_CASES : BEC_CASES.filter(c => inferProduct(c) === activeProduct),
+    [activeProduct]
+  )
+
+  const openCases     = filteredCases.filter(c => c.status === 'blocked' || c.status === 'flagged')
+  const criticalCount = openCases.filter(c => c.severity === 'critical').length
+  const highCount     = openCases.filter(c => c.severity === 'high').length
+  const mediumCount   = openCases.filter(c => c.severity === 'medium').length
+  const totalDecisions = useMemo(() =>
+    activeProduct === 'all'
+      ? AGENTS.reduce((s, a) => s + a.decisionsToday, 0)
+      : Math.round(AGENTS.reduce((s, a) => s + a.decisionsToday, 0) * PRODUCT_SCALE[activeProduct]),
+    [activeProduct]
+  )
+  const blockedRisk   = filteredCases.filter(c => c.status === 'blocked').reduce((s, c) => s + c.instruction.amount, 0)
+  const sarCount      = filteredCases.filter(c => c.outcome.sarFiled).length
+  const autoCleared   = Math.round(AUTO_CLEARED * PRODUCT_SCALE[activeProduct])
+
+  // Scale chart data by active product proportion
+  const scale = PRODUCT_SCALE[activeProduct]
+  const chartData = useMemo(() =>
+    TIME_SERIES.map(pt => ({
+      ...pt,
+      critical: Math.round((pt.critical ?? 0) * scale),
+      high:     Math.round((pt.high     ?? 0) * scale),
+      medium:   Math.round((pt.medium   ?? 0) * scale),
+    })),
+    [scale]
+  )
 
   const filteredAlerts = activeProduct === 'all'
     ? ALERT_QUEUE_ALL
     : ALERT_QUEUE_ALL.filter(a => a.product === activeProduct)
 
+  const productLabel = PRODUCTS.find(p => p.id === activeProduct)?.label ?? 'All Products'
+
   const kpis = [
     {
       emoji: '⚡', label: 'Active Triggers (Today)',
-      value: (openCases.length + AUTO_CLEARED).toString(),
-      sub: `${criticalCount} critical · ${highCount} high · ${AUTO_CLEARED} auto-cleared`,
-      def: `Every rule or ML model that fired on any instruction today. Auto-cleared = resolved by agent without human review.`,
+      value: (openCases.length + autoCleared).toString(),
+      sub: `${criticalCount} critical · ${highCount} high · ${autoCleared} auto-cleared`,
+      def: `Every rule or ML model that fired today. Auto-cleared = resolved by agent without human review.`,
       color: 'text-red-600', topBorder: 'border-t-2 border-t-red-500', badge: 'bg-red-50 border-red-200',
     },
     {
       emoji: '📋', label: 'Open Cases — Needs Human',
       value: openCases.length.toString(),
       sub: `${criticalCount} critical · ${highCount} high · ${mediumCount} medium`,
-      def: `Triggers that could not auto-resolve — require analyst judgment. Funnel: ${openCases.length + AUTO_CLEARED} triggers → ${AUTO_CLEARED} auto-cleared → ${openCases.length} open.`,
+      def: `Triggers that could not auto-resolve — require analyst judgment.`,
       color: 'text-amber-600', topBorder: 'border-t-2 border-t-amber-500', badge: 'bg-amber-50 border-amber-200',
     },
     {
       emoji: '🤖', label: 'Agent Decisions (Today)',
       value: totalDecisions.toLocaleString(),
       sub: `Across ${AGENTS.length} surveillance agents`,
-      def: `Total automated decisions made today across the full 12-agent stack. Each instruction may generate multiple agent-level decisions.`,
+      def: `Total automated decisions across the full 12-agent stack. Each instruction may generate multiple decisions.`,
       color: 'text-blue-600', topBorder: 'border-t-2 border-t-blue-500', badge: 'bg-blue-50 border-blue-200',
     },
     {
       emoji: '🛡', label: 'Value Protected (30d)',
-      value: `$${(blockedRisk / 1_000_000).toFixed(1)}M`,
-      sub: `${BEC_CASES.filter(c => c.status === 'blocked').length} confirmed-fraud wires held · ${sarCount} SARs filed`,
-      def: `Sum of held transaction amounts confirmed as fraudulent (blocked status only). Excludes cases still under investigation.`,
+      value: blockedRisk > 0 ? `$${(blockedRisk / 1_000_000).toFixed(1)}M` : '$0',
+      sub: `${filteredCases.filter(c => c.status === 'blocked').length} confirmed-fraud wires held · ${sarCount} SAR${sarCount !== 1 ? 's' : ''} filed`,
+      def: `Sum of held transaction amounts confirmed as fraudulent. Excludes cases still under investigation.`,
       color: 'text-emerald-600', topBorder: 'border-t-2 border-t-emerald-500', badge: 'bg-emerald-50 border-emerald-200',
     },
   ]
@@ -164,10 +206,7 @@ export function Overview() {
             ))}
           </div>
           {activeProduct !== 'all' && (
-            <button
-              onClick={() => setActiveProduct('all')}
-              className="ml-auto text-[10px] text-gray-400 hover:text-gray-600 underline whitespace-nowrap"
-            >
+            <button onClick={() => setActiveProduct('all')} className="ml-auto text-[10px] text-gray-400 hover:text-gray-600 underline whitespace-nowrap">
               Clear filter
             </button>
           )}
@@ -194,7 +233,9 @@ export function Overview() {
               <div>
                 <h2 className="text-sm font-semibold text-gray-700">30-Day Trigger Activity Timeline</h2>
                 <p className="text-xs text-gray-400 mt-0.5">
-                  Daily trigger firings by severity · Day 30 = Today (14 total = matches KPI above) · Apr 02 – May 01, 2026
+                  {activeProduct === 'all'
+                    ? 'All products · Apr 02 – May 01, 2026'
+                    : `${productLabel} · ${Math.round(PRODUCT_SCALE[activeProduct] * 100)}% of platform triggers · Apr 02 – May 01, 2026`}
                 </p>
               </div>
               <div className="flex items-center gap-4 text-[11px] text-gray-400 shrink-0 ml-6">
@@ -207,7 +248,7 @@ export function Overview() {
 
           <div className="px-5 pt-4 pb-2">
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={TIME_SERIES} margin={{ top: 12, right: 16, bottom: 0, left: -10 }}>
+              <BarChart data={chartData} margin={{ top: 12, right: 16, bottom: 0, left: -10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f8fafc" vertical={false} />
                 <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} interval={4} />
                 <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} width={24} allowDecimals={false} />
@@ -218,13 +259,10 @@ export function Overview() {
                     const high  = payload.find(p => p.dataKey === 'high')?.value as number ?? 0
                     const med   = payload.find(p => p.dataKey === 'medium')?.value as number ?? 0
                     const total = crit + high + med
-                    const isToday = label === 'May 01'
                     return (
                       <div className="bg-white border border-gray-200 rounded-xl shadow-lg px-3.5 py-3 text-xs min-w-[160px]">
-                        <div className="font-bold text-gray-800 mb-2">{label}{isToday ? ' — Today' : ''}</div>
-                        {total === 0 ? (
-                          <div className="text-gray-400">No triggers</div>
-                        ) : (
+                        <div className="font-bold text-gray-800 mb-2">{label}{label === 'May 01' ? ' — Today' : ''}</div>
+                        {total === 0 ? <div className="text-gray-400">No triggers</div> : (
                           <div className="space-y-1">
                             {crit > 0 && <div className="flex justify-between gap-4"><span className="text-red-500 font-semibold">Critical</span><span className="font-mono font-bold text-red-600">{crit}</span></div>}
                             {high > 0 && <div className="flex justify-between gap-4"><span className="text-orange-500 font-semibold">High</span><span className="font-mono font-bold text-orange-600">{high}</span></div>}
@@ -233,11 +271,6 @@ export function Overview() {
                               <span className="text-gray-500 font-semibold">Total</span>
                               <span className="font-mono font-bold text-gray-800">{total}</span>
                             </div>
-                            {isToday && (
-                              <div className="mt-1 pt-1 border-t border-gray-100 text-[10px] text-red-600 font-semibold">
-                                TR-8842 · CU-4419 · PR-9102
-                              </div>
-                            )}
                           </div>
                         )}
                       </div>
@@ -245,7 +278,7 @@ export function Overview() {
                   }}
                 />
                 <ReferenceLine x="May 01" stroke="#ef4444" strokeWidth={1.5} strokeOpacity={0.4}
-                  label={{ value: 'Today · 14', position: 'insideTopLeft', fontSize: 9, fill: '#ef4444', fontWeight: 700, dx: 4, dy: -8 }}
+                  label={{ value: `Today · ${chartData[chartData.length - 1]?.critical ?? 0 + (chartData[chartData.length - 1]?.high ?? 0) + (chartData[chartData.length - 1]?.medium ?? 0)}`, position: 'insideTopLeft', fontSize: 9, fill: '#ef4444', fontWeight: 700, dx: 4, dy: -8 }}
                 />
                 <Bar dataKey="critical" stackId="a" name="Critical" fill="#ef4444" />
                 <Bar dataKey="high"     stackId="a" name="High"     fill="#f97316" />
@@ -282,35 +315,31 @@ export function Overview() {
             <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-semibold text-gray-700">Executive Alert Queue</h2>
-                <p className="text-[10px] text-gray-400 mt-0.5">
-                  {activeProduct === 'all' ? 'All products' : PRODUCTS.find(p => p.id === activeProduct)?.label} · {filteredAlerts.length} alert{filteredAlerts.length !== 1 ? 's' : ''}
-                </p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{productLabel} · {filteredAlerts.length} alert{filteredAlerts.length !== 1 ? 's' : ''}</p>
               </div>
             </div>
             <div className="divide-y divide-gray-100">
               {filteredAlerts.length === 0 ? (
                 <div className="p-6 text-center text-xs text-gray-400">No alerts for this product line</div>
-              ) : (
-                filteredAlerts.map(alert => (
-                  <div key={alert.id} className={clsx('p-4 border-l-4', alert.sev === 'critical' ? 'border-l-red-500' : 'border-l-amber-500')}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-[10px] text-gray-400 font-mono">→ {alert.to}</span>
-                      <span className="text-[10px] text-gray-400 font-mono">{alert.time}</span>
-                    </div>
-                    <div className={clsx('text-xs font-semibold leading-snug mb-1', alert.sev === 'critical' ? 'text-red-700' : 'text-amber-700')}>
-                      {alert.subject}
-                    </div>
-                    <div className="text-[10px] text-gray-500 leading-relaxed mb-2 line-clamp-2">{alert.preview}</div>
-                    <div className="flex flex-wrap gap-1">
-                      {alert.tags.map(t => (
-                        <span key={t} className={clsx('text-[9px] font-bold px-1.5 py-0.5 rounded border', alert.sev === 'critical' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200')}>
-                          {t}
-                        </span>
-                      ))}
-                    </div>
+              ) : filteredAlerts.map(alert => (
+                <div key={alert.id} className={clsx('p-4 border-l-4', alert.sev === 'critical' ? 'border-l-red-500' : 'border-l-amber-500')}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-gray-400 font-mono">→ {alert.to}</span>
+                    <span className="text-[10px] text-gray-400 font-mono">{alert.time}</span>
                   </div>
-                ))
-              )}
+                  <div className={clsx('text-xs font-semibold leading-snug mb-1', alert.sev === 'critical' ? 'text-red-700' : 'text-amber-700')}>
+                    {alert.subject}
+                  </div>
+                  <div className="text-[10px] text-gray-500 leading-relaxed mb-2 line-clamp-2">{alert.preview}</div>
+                  <div className="flex flex-wrap gap-1">
+                    {alert.tags.map(t => (
+                      <span key={t} className={clsx('text-[9px] font-bold px-1.5 py-0.5 rounded border', alert.sev === 'critical' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200')}>
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -336,7 +365,9 @@ export function Overview() {
                         <div className={clsx('h-1 rounded-full', accent.bar)} style={{ width: `${agent.precision}%` }} />
                       </div>
                     </div>
-                    <div className="text-[9px] text-gray-400 mt-2">{agent.decisionsToday} decisions today</div>
+                    <div className="text-[9px] text-gray-400 mt-2">
+                      {activeProduct === 'all' ? agent.decisionsToday : Math.round(agent.decisionsToday * PRODUCT_SCALE[activeProduct])} decisions today
+                    </div>
                   </div>
                 )
               })}
