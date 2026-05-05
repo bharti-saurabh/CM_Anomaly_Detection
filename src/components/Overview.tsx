@@ -1,24 +1,23 @@
+import { useState } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts'
 import clsx from 'clsx'
 import { AGENTS } from '../data/agents'
 import { TIME_SERIES } from '../data/timeSeries'
 import { BEC_CASES } from '../data/becCases'
 
-// ── Derived metrics from live data ────────────────────────────────────────────
+// ── Derived metrics ───────────────────────────────────────────────────────────
 
-const AUTO_CLEARED       = 4   // agent-resolved, no human case created
-const openCases          = BEC_CASES.filter(c => c.status === 'blocked' || c.status === 'flagged')
-const criticalCount      = openCases.filter(c => c.severity === 'critical').length
-const highCount          = openCases.filter(c => c.severity === 'high').length
-const mediumCount        = openCases.filter(c => c.severity === 'medium').length
-const totalDecisions     = AGENTS.reduce((s, a) => s + a.decisionsToday, 0)   // 935
-const blockedRisk        = BEC_CASES
-  .filter(c => c.status === 'blocked')
-  .reduce((s, c) => s + c.instruction.amount, 0)
-const sarCount           = BEC_CASES.filter(c => c.outcome.sarFiled).length
-const overviewAgents     = AGENTS.filter(a => a.showInOverview)
+const AUTO_CLEARED   = 4
+const openCases      = BEC_CASES.filter(c => c.status === 'blocked' || c.status === 'flagged')
+const criticalCount  = openCases.filter(c => c.severity === 'critical').length
+const highCount      = openCases.filter(c => c.severity === 'high').length
+const mediumCount    = openCases.filter(c => c.severity === 'medium').length
+const totalDecisions = AGENTS.reduce((s, a) => s + a.decisionsToday, 0)
+const blockedRisk    = BEC_CASES.filter(c => c.status === 'blocked').reduce((s, c) => s + c.instruction.amount, 0)
+const sarCount       = BEC_CASES.filter(c => c.outcome.sarFiled).length
+const overviewAgents = AGENTS.filter(a => a.showInOverview)
 
-// ── Agent accent colours (front-line) ─────────────────────────────────────────
+// ── Agent accent colours ──────────────────────────────────────────────────────
 
 const AGENT_ACCENT: Record<string, { dot: string; text: string; bg: string; bar: string; border: string }> = {
   'bec-wire-detector':        { dot: 'bg-violet-500', text: 'text-violet-600', bg: 'bg-violet-50', bar: 'bg-violet-500', border: 'border-violet-200' },
@@ -29,128 +28,102 @@ const AGENT_ACCENT: Record<string, { dot: string; text: string; bg: string; bar:
   'velocity-monitor':         { dot: 'bg-orange-500', text: 'text-orange-600', bg: 'bg-orange-50', bar: 'bg-orange-500', border: 'border-orange-200' },
 }
 
-// ── Executive Alert Queue — top 3 cases from live BEC_CASES ──────────────────
+// ── Product definitions ───────────────────────────────────────────────────────
 
-const ALERT_QUEUE = [
+type ProductFilter = 'all' | 'treasury' | 'custody' | 'wealth' | 'corporate-trust' | 'clearance'
+
+const PRODUCTS: { id: ProductFilter; label: string }[] = [
+  { id: 'all',           label: 'All Products'            },
+  { id: 'treasury',      label: 'Treasury Services'       },
+  { id: 'custody',       label: 'Asset Servicing'         },
+  { id: 'corporate-trust', label: 'Corporate Trust'       },
+  { id: 'clearance',     label: 'Clearance & Collateral'  },
+  { id: 'wealth',        label: 'Wealth Management'       },
+]
+
+// ── Alert queue with product tags ─────────────────────────────────────────────
+
+const ALERT_QUEUE_ALL = [
   {
     id: BEC_CASES[0].signalId ?? BEC_CASES[0].id,
     client: BEC_CASES[0].relationship.clientName,
-    subject: `🚨 CRITICAL: $${(BEC_CASES[0].instruction.amount / 1_000_000).toFixed(1)}M Wire Hold — BEC / CEO Impersonation [${BEC_CASES[0].signalId ?? BEC_CASES[0].id}]`,
+    subject: `CRITICAL: $${(BEC_CASES[0].instruction.amount / 1_000_000).toFixed(1)}M Wire Hold — BEC / CEO Impersonation [${BEC_CASES[0].signalId ?? BEC_CASES[0].id}]`,
     preview: `Domain ${BEC_CASES[0].email.senderAddress} proximate to ${BEC_CASES[0].email.legitimateDomain} (age ${BEC_CASES[0].email.senderDomainAgeDays}d). NLP score ${BEC_CASES[0].nlpAnalysis.urgencyPhrases.length * 23}. Self-approved. SAR filed.`,
     time: BEC_CASES[0].createdAt.slice(11),
     to: 'Head of Risk + FCC Lead',
     sev: 'critical' as const,
+    product: 'treasury' as ProductFilter,
     tags: ['Auto-Generated', 'Layer 2', 'SAR Filed'],
   },
   {
     id: BEC_CASES[5].id,
     client: BEC_CASES[5].relationship.clientName,
-    subject: `🚨 CRITICAL: $${(BEC_CASES[5].instruction.amount / 1_000_000).toFixed(1)}M Cayman Wire — FinCEN Match + SWIFT Controls Flag [${BEC_CASES[5].id}]`,
+    subject: `CRITICAL: $${(BEC_CASES[5].instruction.amount / 1_000_000).toFixed(1)}M Cayman Wire — FinCEN Match + SWIFT Controls Flag [${BEC_CASES[5].id}]`,
     preview: `Domain ${BEC_CASES[5].email.senderAddress} (${BEC_CASES[5].email.senderDomainAgeDays}d old). MFA bypassed. Login from ${BEC_CASES[5].identity.loginLocation} (expected ${BEC_CASES[5].identity.expectedLocation}). FinCEN 314(b) match on beneficiary.`,
     time: BEC_CASES[5].createdAt.slice(11),
     to: 'Financial Crimes + Legal',
     sev: 'critical' as const,
+    product: 'custody' as ProductFilter,
     tags: ['FinCEN Match', 'Layer 2', 'FBI Referral'],
   },
   {
     id: BEC_CASES[1].id,
     client: BEC_CASES[1].relationship.clientName,
-    subject: `⚠ HIGH: $${(BEC_CASES[1].instruction.amount / 1_000_000).toFixed(1)}M M&A Settlement — Domain Spoofing Detected [${BEC_CASES[1].id}]`,
+    subject: `HIGH: $${(BEC_CASES[1].instruction.amount / 1_000_000).toFixed(1)}M M&A Settlement — Domain Spoofing Detected [${BEC_CASES[1].id}]`,
     preview: `From ${BEC_CASES[1].email.senderAddress} (expected ${BEC_CASES[1].email.legitimateDomain}). Domain ${BEC_CASES[1].email.senderDomainAgeDays}d old. SWIFT Controls flagged. Correspondent banking review initiated.`,
     time: BEC_CASES[1].createdAt.slice(11),
     to: 'Arjun K. (Analyst)',
     sev: 'high' as const,
+    product: 'treasury' as ProductFilter,
     tags: ['Domain Alert', 'Case Pre-Loaded'],
   },
-]
-
-// ── Pipeline layer definitions ────────────────────────────────────────────────
-
-const PIPELINE_LAYERS = [
   {
-    num: 1, title: 'Pre-Instruction',
-    agents: ['Insider Threat Monitor', 'Session & Identity Guard', 'Regulatory Threshold Monitor'],
-    techniques: ['UEBA Behavioural Baseline', 'Dark Web Feed Monitor', 'Credential Anomaly Detection', 'Breach Feed Alert'],
-    products: ['All Products'],
-    count: 2, countLabel: 'pre-signals active',
-    note: '2 session anomalies flagged overnight. Pre-attack — not yet in KPI count.',
-    accent: { bg: 'bg-white', border: 'border-gray-200', top: '', dot: 'bg-amber-500', num: 'text-amber-600', tag: 'bg-amber-50 border-amber-200 text-amber-700' },
-    firing: false,
-  },
-  {
-    num: 2, title: 'Instruction Arrival',
-    agents: ['BEC Wire Detector', 'Email NLP Screener'],
-    techniques: ['Domain Proximity Score', 'NLP Urgency Classifier', 'New Beneficiary Detect', 'Amount Outlier ML'],
-    products: ['SWIFT', 'Fedwire', 'ACH'],
-    count: openCases.length, countLabel: 'FIRING NOW',
-    note: `→ ${openCases.length + AUTO_CLEARED} KPI triggers: ${openCases.length} open cases + ${AUTO_CLEARED} auto-cleared by agents.`,
-    accent: { bg: 'bg-red-50', border: 'border-red-200', top: 'border-t-2 border-t-red-500', dot: 'bg-red-500', num: 'text-red-600', tag: 'bg-red-50 border-red-200 text-red-700' },
-    firing: true,
-  },
-  {
-    num: 3, title: 'Authorization Stage',
-    agents: ['Maker-Checker Auditor', 'Counterparty Risk Engine'],
-    techniques: ['Multi-Flag Compound', 'RM Bypass Detect', 'Dual-Auth Enforcer', 'Control Override Alert'],
-    products: ['All Products'],
-    count: 3, countLabel: 'pending auth review',
-    note: '3 open cases awaiting second authorizer. Maker-checker segregation validated.',
-    accent: { bg: 'bg-white', border: 'border-gray-200', top: '', dot: 'bg-amber-500', num: 'text-amber-600', tag: 'bg-amber-50 border-amber-200 text-amber-700' },
-    firing: false,
-  },
-  {
-    num: 4, title: 'Payment Execution',
-    agents: ['Velocity Monitor', 'Custody Settlement Sentinel'],
-    techniques: ['Velocity Anomaly Scoring', 'SWIFT GPI Tracking', 'Structuring Detection', 'Settlement Sentinel MT540+'],
-    products: ['Treasury', 'Custody', 'Wealth'],
-    count: 0, countLabel: '✓ Clean — no executions',
-    note: `All ${openCases.length + AUTO_CLEARED} flagged instructions held before reaching this layer. Money is safe.`,
-    accent: { bg: 'bg-emerald-50', border: 'border-emerald-200', top: 'border-t-2 border-t-emerald-500', dot: 'bg-emerald-500', num: 'text-emerald-600', tag: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
-    firing: false,
-  },
-  {
-    num: 5, title: 'Network Intelligence',
-    agents: ['AML Typology Classifier', 'Sanctions & OFAC Scanner', 'Synthetic Identity Detector'],
-    techniques: ['Cross-Client Beneficiary Graph', 'AML Typology Classification', 'SAR Auto-Trigger', 'Sanctions Screening'],
-    products: ['All Products'],
-    count: sarCount, countLabel: 'SARs filed / pending',
-    note: `${sarCount} confirmed fraud cases have filed SARs. Network graph analysis complete on shared beneficiary accounts.`,
-    accent: { bg: 'bg-white', border: 'border-gray-200', top: '', dot: 'bg-amber-500', num: 'text-amber-600', tag: 'bg-amber-50 border-amber-200 text-amber-700' },
-    firing: false,
+    id: BEC_CASES[3]?.id ?? 'BEC-2024-0031',
+    client: BEC_CASES[3]?.relationship.clientName ?? 'Thornfield Asset Management',
+    subject: `HIGH: $890K Vendor Account Change — Payroll Redirect Pattern`,
+    preview: `Vendor banking details changed 48h before payroll run. New account in jurisdiction outside client baseline. Maker-checker segregation bypassed.`,
+    time: '14:22:08',
+    to: 'Operations Risk',
+    sev: 'high' as const,
+    product: 'wealth' as ProductFilter,
+    tags: ['Vendor Fraud', 'Layer 3'],
   },
 ]
-
-// ── Product filter chips (static — visual context only) ───────────────────────
-
-const PRODUCTS = ['All Products', 'Treasury Services', 'Asset Servicing', 'Corporate Trust', 'Clearance & Collateral', 'Wealth Management', 'Pershing / Wove']
 
 export function Overview() {
+  const [activeProduct, setActiveProduct] = useState<ProductFilter>('all')
+
+  const filteredAlerts = activeProduct === 'all'
+    ? ALERT_QUEUE_ALL
+    : ALERT_QUEUE_ALL.filter(a => a.product === activeProduct)
+
   const kpis = [
     {
       emoji: '⚡', label: 'Active Triggers (Today)',
       value: (openCases.length + AUTO_CLEARED).toString(),
       sub: `${criticalCount} critical · ${highCount} high · ${AUTO_CLEARED} auto-cleared`,
-      def: `Every rule or ML model that fired on any instruction today. One instruction can fire multiple agent triggers simultaneously. Auto-cleared = resolved by agent without human review.`,
+      def: `Every rule or ML model that fired on any instruction today. Auto-cleared = resolved by agent without human review.`,
       color: 'text-red-600', topBorder: 'border-t-2 border-t-red-500', badge: 'bg-red-50 border-red-200',
     },
     {
       emoji: '📋', label: 'Open Cases — Needs Human',
       value: openCases.length.toString(),
       sub: `${criticalCount} critical · ${highCount} high · ${mediumCount} medium`,
-      def: `Triggers AFRS could not auto-resolve — require analyst judgment. Funnel: ${openCases.length + AUTO_CLEARED} triggers fired → ${AUTO_CLEARED} auto-cleared → ${openCases.length} open cases assigned to analysts.`,
+      def: `Triggers that could not auto-resolve — require analyst judgment. Funnel: ${openCases.length + AUTO_CLEARED} triggers → ${AUTO_CLEARED} auto-cleared → ${openCases.length} open.`,
       color: 'text-amber-600', topBorder: 'border-t-2 border-t-amber-500', badge: 'bg-amber-50 border-amber-200',
     },
     {
       emoji: '🤖', label: 'Agent Decisions (Today)',
       value: totalDecisions.toLocaleString(),
       sub: `Across ${AGENTS.length} surveillance agents`,
-      def: `Instructions where an agent fired a signal and resolved it automatically without creating a human case. Each unique instruction may generate multiple agent-level decisions across the 12-agent stack.`,
+      def: `Total automated decisions made today across the full 12-agent stack. Each instruction may generate multiple agent-level decisions.`,
       color: 'text-blue-600', topBorder: 'border-t-2 border-t-blue-500', badge: 'bg-blue-50 border-blue-200',
     },
     {
       emoji: '🛡', label: 'Value Protected (30d)',
       value: `$${(blockedRisk / 1_000_000).toFixed(1)}M`,
-      sub: `${BEC_CASES.filter(c => c.status === 'blocked').length} confirmed-fraud wires held`,
-      def: `Sum of held transaction amounts confirmed as fraudulent. Includes only "blocked" cases where fraud was confirmed — excludes cases still under investigation.`,
+      sub: `${BEC_CASES.filter(c => c.status === 'blocked').length} confirmed-fraud wires held · ${sarCount} SARs filed`,
+      def: `Sum of held transaction amounts confirmed as fraudulent (blocked status only). Excludes cases still under investigation.`,
       color: 'text-emerald-600', topBorder: 'border-t-2 border-t-emerald-500', badge: 'bg-emerald-50 border-emerald-200',
     },
   ]
@@ -175,17 +148,29 @@ export function Overview() {
         <div className="flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-xl shadow-sm">
           <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">Filter by Product</span>
           <div className="flex flex-wrap gap-2">
-            {PRODUCTS.map((p, i) => (
-              <div key={p} className={clsx(
-                'text-[11px] font-medium px-3 py-1 rounded-full border cursor-default',
-                i === 0
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'
-              )}>
-                {p}
-              </div>
+            {PRODUCTS.map(p => (
+              <button
+                key={p.id}
+                onClick={() => setActiveProduct(p.id)}
+                className={clsx(
+                  'text-[11px] font-medium px-3 py-1 rounded-full border transition-all',
+                  activeProduct === p.id
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-blue-300 hover:text-blue-600'
+                )}
+              >
+                {p.label}
+              </button>
             ))}
           </div>
+          {activeProduct !== 'all' && (
+            <button
+              onClick={() => setActiveProduct('all')}
+              className="ml-auto text-[10px] text-gray-400 hover:text-gray-600 underline whitespace-nowrap"
+            >
+              Clear filter
+            </button>
+          )}
         </div>
 
         {/* KPI Cards */}
@@ -200,84 +185,6 @@ export function Overview() {
               </div>
             </div>
           ))}
-        </div>
-
-        {/* 5-Layer Pipeline */}
-        <div className="border-2 border-blue-600 rounded-xl overflow-hidden">
-          {/* Pipeline header */}
-          <div className="bg-blue-600 px-5 py-3 flex items-center justify-between">
-            <div>
-              <div className="text-sm font-bold text-white">🛡 5-Layer Fraud Checkpoint Pipeline</div>
-              <div className="text-[10px] text-blue-200 mt-0.5">Every instruction screened through all 5 layers automatically · Real-Time Status</div>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-white/15 border border-white/30 rounded-full">
-              <span className="w-2 h-2 rounded-full bg-red-300 shadow-[0_0_6px_rgba(255,100,100,0.8)] animate-pulse" />
-              <span className="text-[10px] font-bold text-red-100">Layer 2 FIRING NOW</span>
-            </div>
-          </div>
-
-          {/* Pipeline cards */}
-          <div className="grid grid-cols-5 bg-gray-50">
-            {PIPELINE_LAYERS.map(layer => (
-              <div key={layer.num} className={clsx('border-r last:border-r-0 border-gray-200 p-4', layer.accent.bg, layer.accent.top)}>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Layer {layer.num}</span>
-                  {layer.firing
-                    ? <span className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.6)] animate-pulse" />
-                    : <span className={clsx('w-2 h-2 rounded-full', layer.accent.dot)} />
-                  }
-                </div>
-                <div className="text-xs font-bold text-gray-800 mb-3">{layer.title}</div>
-
-                {/* Techniques */}
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {layer.techniques.map(t => (
-                    <span key={t} className={clsx('text-[8px] font-semibold px-1.5 py-0.5 rounded border', layer.accent.tag)}>
-                      {t}
-                    </span>
-                  ))}
-                </div>
-
-                {/* Product scope */}
-                <div className="flex flex-wrap gap-1 mb-3">
-                  {layer.products.map(p => (
-                    <span key={p} className="text-[8px] font-semibold px-1.5 py-0.5 rounded border bg-blue-50 border-blue-200 text-blue-700">
-                      {p}
-                    </span>
-                  ))}
-                </div>
-
-                {/* Count */}
-                <div className={clsx('text-xl font-bold font-mono mb-0.5', layer.accent.num)}>{layer.count}</div>
-                <div className={clsx('text-[9px] font-semibold mb-3', layer.firing ? 'text-red-500' : layer.count === 0 ? 'text-emerald-600' : 'text-gray-400')}>
-                  {layer.countLabel}
-                </div>
-
-                {/* Note */}
-                <div className={clsx('text-[9px] leading-relaxed border-t pt-2', layer.firing ? 'border-red-200 text-gray-500' : 'border-gray-200 text-gray-400')}>
-                  {layer.note}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Reconciliation footer */}
-          <div className="bg-blue-50 border-t border-blue-200 px-4 py-2.5 flex items-center gap-2 flex-wrap">
-            <span className="text-[10px] font-bold text-blue-900">📐 Reconciliation:</span>
-            <span className="px-2 py-0.5 bg-red-600 text-white text-[10px] font-semibold rounded">
-              {openCases.length + AUTO_CLEARED} Active Triggers
-            </span>
-            <span className="text-[10px] text-blue-700">= L2: {openCases.length} open + {AUTO_CLEARED} auto-cleared</span>
-            <span className="text-blue-300">|</span>
-            <span className="px-2 py-0.5 bg-amber-600 text-white text-[10px] font-semibold rounded">
-              {openCases.length} Open Cases
-            </span>
-            <span className="text-[10px] text-blue-700">= analyst work items requiring review</span>
-            <span className="text-blue-300">|</span>
-            <span className="px-2 py-0.5 bg-emerald-600 text-white text-[10px] font-semibold rounded">
-              L4: 0 executions — money safe
-            </span>
-          </div>
         </div>
 
         {/* 30-Day Trigger Activity Timeline */}
@@ -307,9 +214,9 @@ export function Overview() {
                 <Tooltip
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null
-                    const crit = payload.find(p => p.dataKey === 'critical')?.value as number ?? 0
-                    const high = payload.find(p => p.dataKey === 'high')?.value as number ?? 0
-                    const med  = payload.find(p => p.dataKey === 'medium')?.value as number ?? 0
+                    const crit  = payload.find(p => p.dataKey === 'critical')?.value as number ?? 0
+                    const high  = payload.find(p => p.dataKey === 'high')?.value as number ?? 0
+                    const med   = payload.find(p => p.dataKey === 'medium')?.value as number ?? 0
                     const total = crit + high + med
                     const isToday = label === 'May 01'
                     return (
@@ -347,34 +254,16 @@ export function Overview() {
             </ResponsiveContainer>
           </div>
 
-          {/* AFRS-style interpretation guide */}
           <div className="mx-5 mb-5 mt-2 bg-slate-50 border border-slate-200 rounded-xl p-4">
-            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">📊 Chart Interpretation Guide</p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Chart Interpretation Guide</p>
             <div className="divide-y divide-slate-200">
               {[
-                {
-                  icon: '📅',
-                  title: 'Apr 07 — Domain Spoofing Spike (3 triggers)',
-                  detail: 'First coordinated BEC attempt: domain nexus-institutional.com.cn registered 17 days prior targeting nexusinstitutional.com. Two High + one Medium trigger fired at Layer 2. All blocked. Wire of $3.8M held pending correspondent banking review.',
-                },
-                {
-                  icon: '🚨',
-                  title: 'Apr 17 — Critical Alert (5 triggers, 1 Critical)',
-                  detail: 'CEO impersonation targeting Garrison Capital Holdings ($8.7M Cayman wire). Domain registered 5 days prior. FinCEN 314(b) match on beneficiary account. MFA bypassed — login from Nassau, Bahamas (expected Houston). Highest-confidence block to date. FBI referral made.',
-                },
-                {
-                  icon: '📈',
-                  title: 'Apr 23–30 — Sustained Escalation (4–8 triggers/day)',
-                  detail: 'Multi-wave attack pattern: legal settlement impersonation (Apr 23, $5.1M), vendor account-change fraud (Apr 26, $890K), and M&A domain spoofing (Apr 29, $2.3M). Volume increasing from 4 to 8 triggers/day over 7 days. Attacks accelerating.',
-                },
-                {
-                  icon: '🔴',
-                  title: 'May 01 — Critical Surge (14 triggers · 4 Critical · 6 High · 4 Medium)',
-                  detail: 'Three simultaneous high-value attacks: TR-8842 ($14.5M BEC CEO wire), CU-4419 (MT542 dormancy wakeup), PR-9102 (synthetic ID ring at RIA node). 14 total triggers = matches Active Triggers KPI above. All held before Layer 4 — no payments executed.',
-                },
-              ].map((ev, i, arr) => (
-                <div key={i} className={clsx('flex gap-3 py-3', i === arr.length - 1 ? '' : '')}>
-                  <span className="text-base shrink-0 mt-0.5">{ev.icon}</span>
+                { title: 'Apr 07 — Domain Spoofing Spike (3 triggers)', detail: 'First coordinated BEC attempt: nexus-institutional.com.cn targeting nexusinstitutional.com. Two High + one Medium trigger fired at Layer 2. Wire of $3.8M held.' },
+                { title: 'Apr 17 — Critical Alert (5 triggers, 1 Critical)', detail: 'CEO impersonation targeting Garrison Capital ($8.7M Cayman wire). FinCEN 314(b) match. MFA bypassed. FBI referral made.' },
+                { title: 'Apr 23–30 — Sustained Escalation (4–8 triggers/day)', detail: 'Multi-wave attack pattern: legal settlement impersonation ($5.1M), vendor account-change ($890K), M&A domain spoofing ($2.3M).' },
+                { title: 'May 01 — Critical Surge (14 triggers · 4 Critical · 6 High · 4 Medium)', detail: 'Three simultaneous attacks: TR-8842 ($14.5M BEC), CU-4419 (MT542 dormancy), PR-9102 (synthetic ID ring). All held before Layer 4.' },
+              ].map((ev, i) => (
+                <div key={i} className="flex gap-3 py-3">
                   <div>
                     <div className="text-[11px] font-bold text-slate-700 mb-1">{ev.title}</div>
                     <div className="text-[10px] text-slate-500 leading-relaxed">{ev.detail}</div>
@@ -390,36 +279,38 @@ export function Overview() {
 
           {/* Executive Alert Queue */}
           <div className="col-span-2 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50">
-              <h2 className="text-sm font-semibold text-gray-700">Executive Alert Queue</h2>
-              <p className="text-[10px] text-gray-400 mt-0.5">Auto-generated from live case data · Sorted by severity</p>
+            <div className="px-5 py-3.5 border-b border-gray-100 bg-gray-50 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-700">Executive Alert Queue</h2>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  {activeProduct === 'all' ? 'All products' : PRODUCTS.find(p => p.id === activeProduct)?.label} · {filteredAlerts.length} alert{filteredAlerts.length !== 1 ? 's' : ''}
+                </p>
+              </div>
             </div>
             <div className="divide-y divide-gray-100">
-              {ALERT_QUEUE.map(alert => (
-                <div key={alert.id} className={clsx(
-                  'p-4 border-l-4',
-                  alert.sev === 'critical' ? 'border-l-red-500' : 'border-l-amber-500'
-                )}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-[10px] text-gray-400 font-mono">→ {alert.to}</span>
-                    <span className="text-[10px] text-gray-400 font-mono">{alert.time}</span>
+              {filteredAlerts.length === 0 ? (
+                <div className="p-6 text-center text-xs text-gray-400">No alerts for this product line</div>
+              ) : (
+                filteredAlerts.map(alert => (
+                  <div key={alert.id} className={clsx('p-4 border-l-4', alert.sev === 'critical' ? 'border-l-red-500' : 'border-l-amber-500')}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] text-gray-400 font-mono">→ {alert.to}</span>
+                      <span className="text-[10px] text-gray-400 font-mono">{alert.time}</span>
+                    </div>
+                    <div className={clsx('text-xs font-semibold leading-snug mb-1', alert.sev === 'critical' ? 'text-red-700' : 'text-amber-700')}>
+                      {alert.subject}
+                    </div>
+                    <div className="text-[10px] text-gray-500 leading-relaxed mb-2 line-clamp-2">{alert.preview}</div>
+                    <div className="flex flex-wrap gap-1">
+                      {alert.tags.map(t => (
+                        <span key={t} className={clsx('text-[9px] font-bold px-1.5 py-0.5 rounded border', alert.sev === 'critical' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200')}>
+                          {t}
+                        </span>
+                      ))}
+                    </div>
                   </div>
-                  <div className={clsx('text-xs font-semibold leading-snug mb-1', alert.sev === 'critical' ? 'text-red-700' : 'text-amber-700')}>
-                    {alert.subject}
-                  </div>
-                  <div className="text-[10px] text-gray-500 leading-relaxed mb-2 line-clamp-2">{alert.preview}</div>
-                  <div className="flex flex-wrap gap-1">
-                    {alert.tags.map(t => (
-                      <span key={t} className={clsx(
-                        'text-[9px] font-bold px-1.5 py-0.5 rounded border',
-                        alert.sev === 'critical' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'
-                      )}>
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
 

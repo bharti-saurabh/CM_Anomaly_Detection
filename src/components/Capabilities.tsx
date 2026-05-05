@@ -12,7 +12,7 @@ import { AGENTS } from '../data/agents'
 
 const ATTACK_STEPS = [
   {
-    day: 'Day 1',
+    day: 'Stage 1',
     actor: 'Attacker',
     title: 'Registers lookalike domain',
     detail: 'nexusinstitutional-llc.com registered — 1 character from client\'s real domain. Standard controls do exact-match lookups only.',
@@ -24,7 +24,7 @@ const ATTACK_STEPS = [
     borderColor: 'border-gray-200',
   },
   {
-    day: 'Days 7–13',
+    day: 'Stage 2',
     actor: 'Attacker',
     title: 'Monitors email thread',
     detail: 'Attacker intercepts or spoofs an ongoing wire transfer discussion. Studies tone, names, and language of legitimate participants.',
@@ -36,7 +36,7 @@ const ATTACK_STEPS = [
     borderColor: 'border-amber-200',
   },
   {
-    day: 'Day 14 · 09:10',
+    day: 'Stage 3',
     actor: 'Attacker',
     title: 'Sends spoofed email',
     detail: '"Please update the beneficiary account for today\'s settlement — urgent, board approval required." DKIM passes on the spoofed domain.',
@@ -48,7 +48,7 @@ const ATTACK_STEPS = [
     borderColor: 'border-red-200',
   },
   {
-    day: 'Day 14 · 09:14',
+    day: 'Stage 4',
     actor: 'Victim',
     title: 'Submits wire instruction',
     detail: '$2.3M Fedwire to new beneficiary in Cayman Islands. Submitted off-hours on a new device. Self-approved — dual auth bypassed.',
@@ -60,7 +60,7 @@ const ATTACK_STEPS = [
     borderColor: 'border-red-200',
   },
   {
-    day: 'Day 14 · 09:17',
+    day: 'Stage 5',
     actor: 'System',
     title: 'Payment executes',
     detail: 'Without cross-channel correlation, each silo passed the instruction. $2.3M exits. Recovery rate for BEC wires: <15%.',
