@@ -670,14 +670,281 @@ function AgentRow({ def, lines, score, isSelected, onClick }: {
   )
 }
 
-// ── Ensemble score ────────────────────────────────────────────────────────────
+// ── Ensemble score modal ──────────────────────────────────────────────────────
+
+function EnsembleScoreModal({ c, agentData, onClose }: {
+  c: BECCase
+  agentData: Record<AgentId, { score: number; lines: string[] }>
+  onClose: () => void
+}) {
+  const t = c.anomalyScore
+  const col = t >= 80
+    ? { stroke: '#ef4444', text: 'text-red-600',     label: 'CRITICAL', badge: 'bg-red-50 text-red-700 border-red-300',       bar: 'bg-red-500'     }
+    : t >= 65
+    ? { stroke: '#f97316', text: 'text-orange-600',  label: 'HIGH',     badge: 'bg-orange-50 text-orange-700 border-orange-300', bar: 'bg-orange-500' }
+    : t >= 45
+    ? { stroke: '#f59e0b', text: 'text-amber-600',   label: 'MEDIUM',   badge: 'bg-amber-50 text-amber-700 border-amber-300',   bar: 'bg-amber-500'  }
+    : { stroke: '#10b981', text: 'text-emerald-600', label: 'LOW',      badge: 'bg-emerald-50 text-emerald-700 border-emerald-300', bar: 'bg-emerald-500' }
+
+  const r = 52, cx = 64, cy = 64, circ = 2 * Math.PI * r, dash = circ * (1 - t / 100)
+
+  const signals     = buildSignalCards(c)
+  const critSigs    = signals.filter(s => s.sev === 'critical')
+  const highSigs    = signals.filter(s => s.sev === 'high')
+  const medSigs     = signals.filter(s => s.sev === 'medium')
+  const sortedSigs  = [...critSigs, ...highSigs, ...medSigs]
+
+  const totalScore  = AGENTS.reduce((sum, a) => sum + agentData[a.id].score, 0)
+
+  const typology    = c.externalIntel.emailDomainIsLookalike && c.instruction.beneficiaryIsNew ? 'BEC-3A'
+    : (!c.instruction.dualAuthFollowed || c.instruction.selfApproved) ? 'BEC-5A'
+    : !c.relationship.typicalCountries.includes(c.instruction.beneficiaryCountry) ? 'BEC-2B'
+    : 'BEC-1C'
+  const typologyDesc = typology === 'BEC-3A' ? 'Lookalike domain + new beneficiary'
+    : typology === 'BEC-5A' ? 'Control override / self-approval'
+    : typology === 'BEC-2B' ? 'New offshore entity'
+    : 'Social engineering'
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-[880px] max-w-[96vw] max-h-[92vh] flex flex-col overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* ── Modal header ── */}
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between shrink-0 bg-gray-50">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className={clsx('text-[11px] font-bold border rounded-full px-3 py-1 uppercase tracking-widest shrink-0', col.badge)}>
+              {col.label}
+            </span>
+            <span className="text-sm font-bold text-gray-900 truncate">{c.relationship.clientName}</span>
+            <span className="text-[11px] font-mono text-gray-400 shrink-0">{c.id}</span>
+            <span className="text-gray-300 shrink-0">·</span>
+            <span className="text-[11px] text-gray-500 truncate">
+              {c.instruction.currency} {c.instruction.amount.toLocaleString()} → {c.instruction.beneficiaryName}
+            </span>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-200 transition-colors text-gray-400 shrink-0 ml-4">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+
+          {/* ── Score gauge + agent breakdown ── */}
+          <div className="flex border-b border-gray-100">
+
+            {/* Gauge */}
+            <div className="w-56 shrink-0 flex flex-col items-center justify-center py-7 px-4 border-r border-gray-100 bg-gradient-to-b from-gray-50 to-white">
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-3">Ensemble Score</div>
+              <svg width="128" height="128" viewBox="0 0 128 128">
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e2e8f0" strokeWidth="13" />
+                <circle cx={cx} cy={cy} r={r} fill="none" stroke={col.stroke} strokeWidth="13"
+                  strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dash}
+                  transform={`rotate(-90 ${cx} ${cy})`}
+                  style={{ filter: `drop-shadow(0 0 8px ${col.stroke}50)` }} />
+                <text x={cx} y={cy - 4} textAnchor="middle" fill={col.stroke} fontSize="30" fontWeight="800" fontFamily="ui-monospace,monospace">{t}</text>
+                <text x={cx} y={cy + 18} textAnchor="middle" fill="#94a3b8" fontSize="11" fontFamily="ui-monospace,monospace">/100</text>
+              </svg>
+              <div className={clsx('text-xs font-bold mt-2', col.text)}>{col.label} RISK</div>
+              <div className={clsx('text-[10px] font-mono mt-1.5 px-2 py-0.5 rounded border uppercase tracking-wide', col.badge)}>
+                {c.status}
+              </div>
+              {c.status === 'blocked' && (
+                <div className="mt-3 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 text-center">
+                  <div className="text-[9px] font-bold uppercase tracking-widest mb-0.5">Protected</div>
+                  <div className="text-sm font-bold font-mono">
+                    {c.instruction.currency} {c.instruction.amount.toLocaleString()}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Agent scores */}
+            <div className="flex-1 px-6 py-5">
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-4">Specialist Agent Scores</div>
+
+              {/* Stacked composition bar */}
+              <div className="mb-5">
+                <div className="text-[9px] text-gray-400 mb-1.5">Score composition across agents</div>
+                <div className="h-3.5 rounded-full overflow-hidden flex gap-px">
+                  {AGENTS.map(def => {
+                    const pct = totalScore > 0 ? (agentData[def.id].score / totalScore) * 100 : 0
+                    return (
+                      <div
+                        key={def.id}
+                        className={clsx('h-full transition-all', def.accent.bar)}
+                        style={{ width: `${pct}%` }}
+                        title={`${def.name}: ${Math.round(agentData[def.id].score * 100)}`}
+                      />
+                    )
+                  })}
+                </div>
+                <div className="flex gap-4 mt-2 flex-wrap">
+                  {AGENTS.map(def => (
+                    <div key={def.id} className="flex items-center gap-1">
+                      <div className={clsx('w-2 h-2 rounded-sm shrink-0', def.accent.bar)} />
+                      <span className={clsx('text-[9px] font-semibold', def.accent.text)}>{def.name.split(' ')[0]}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Individual agent rows */}
+              <div className="space-y-3.5">
+                {AGENTS.map(def => {
+                  const d   = agentData[def.id]
+                  const pct = Math.round(d.score * 100)
+                  const Icon = def.icon
+                  return (
+                    <div key={def.id}>
+                      <div className="flex items-center gap-2.5 mb-1">
+                        <Icon className={clsx('w-3.5 h-3.5 shrink-0', def.accent.text)} />
+                        <span className={clsx('text-[11px] font-bold flex-1', def.accent.text)}>{def.name}</span>
+                        <span className="text-[9px] text-gray-400 font-mono">{def.model}</span>
+                        <span className={clsx('text-sm font-bold font-mono w-7 text-right shrink-0', def.accent.text)}>{pct}</span>
+                      </div>
+                      <div className="flex items-center gap-2 pl-6">
+                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div className={clsx('h-2 rounded-full', def.accent.bar)} style={{ width: `${pct}%` }} />
+                        </div>
+                        <span className="text-[9px] text-gray-300 font-mono">100</span>
+                      </div>
+                      <div className="text-[9px] text-gray-400 font-mono pl-6 mt-0.5 truncate">
+                        {d.lines[d.lines.length - 1] ?? ''}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Risk signals grid ── */}
+          <div className="px-6 py-4 border-b border-gray-100">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Risk Signals Detected</div>
+              <div className="flex items-center gap-1.5 ml-1">
+                {critSigs.length > 0 && (
+                  <span className="text-[9px] font-bold bg-red-50 text-red-600 border border-red-200 px-1.5 py-0.5 rounded-full">
+                    {critSigs.length} critical
+                  </span>
+                )}
+                {highSigs.length > 0 && (
+                  <span className="text-[9px] font-bold bg-orange-50 text-orange-600 border border-orange-200 px-1.5 py-0.5 rounded-full">
+                    {highSigs.length} high
+                  </span>
+                )}
+                {medSigs.length > 0 && (
+                  <span className="text-[9px] font-bold bg-amber-50 text-amber-600 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                    {medSigs.length} medium
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              {sortedSigs.map(card => {
+                const s       = SEV_CARD[card.sev]
+                const Icon    = card.Icon
+                const agDef   = AGENTS.find(a => a.id === card.agentId)!
+                return (
+                  <div key={card.id} className={clsx('rounded-xl border p-3', s.border, s.bg)}>
+                    <div className="flex items-start gap-2">
+                      <Icon className={clsx('w-3.5 h-3.5 shrink-0 mt-0.5', s.icon)} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                          <span className={clsx('text-[10px] font-bold uppercase tracking-wide', s.icon)}>{card.label}</span>
+                          <span className={clsx('text-[8px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wide bg-white/80', agDef.accent.text, agDef.accent.border)}>
+                            {agDef.name.split(' ')[0]}
+                          </span>
+                        </div>
+                        <div className={clsx('text-xs font-semibold', s.val)}>{card.value}</div>
+                        <div className="text-[10px] text-gray-500 mt-0.5 line-clamp-1">{card.detail}</div>
+                      </div>
+                      <div className={clsx('w-2 h-2 rounded-full shrink-0 mt-1', s.dot)} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* ── Risk flags + AML typology ── */}
+          <div className="flex border-b border-gray-100">
+            <div className="flex-1 px-6 py-4 border-r border-gray-100">
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-3">
+                Risk Flags ({c.riskFlags.length})
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {c.riskFlags.map((f, idx) => (
+                  <span key={idx} className="flex items-center gap-1 text-[10px] px-2 py-1 bg-red-50 text-red-700 border border-red-200 rounded-lg font-medium">
+                    <span className="text-red-400 text-[8px]">▲</span>{f}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="w-64 shrink-0 px-5 py-4 bg-slate-50/60">
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-3">AML Classification</div>
+              <div className="space-y-2.5">
+                {[
+                  { label: 'Typology',    value: typology,                     cls: clsx(col.text, 'font-mono font-bold') },
+                  { label: 'Pattern',     value: typologyDesc,                  cls: 'text-gray-700 font-medium' },
+                  { label: 'Disposition', value: c.outcome.disposition,         cls: 'text-gray-600' },
+                  { label: 'Action',      value: 'Enhanced Due Diligence',      cls: 'text-violet-700 font-semibold' },
+                  ...(c.outcome.sarFiled
+                    ? [{ label: 'SAR', value: `Filed — ${c.outcome.sarReference ?? ''}`, cls: 'text-red-700 font-bold' }]
+                    : []
+                  ),
+                ].map(row => (
+                  <div key={row.label} className="flex items-start gap-2">
+                    <span className="text-[10px] text-gray-400 w-20 shrink-0 pt-px">{row.label}</span>
+                    <span className={clsx('text-[11px] flex-1', row.cls)}>{row.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* ── Investigator summary ── */}
+          <div className="px-6 py-5">
+            <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2">Investigator Summary</div>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3">
+              <p className="text-[12px] text-slate-700 leading-relaxed">{c.outcome.investigatorNotes}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Footer ── */}
+        <div className="px-6 py-3 border-t border-gray-200 bg-gray-50 shrink-0 flex items-center justify-between">
+          <div className="flex items-center gap-4 text-[10px] text-gray-400">
+            <span>
+              <span className="font-semibold text-gray-600">Model:</span> Ensemble — XGBoost · BERT · GNN · Isolation Forest · Rules
+            </span>
+            {c.outcome.resolutionDays !== null && (
+              <span><span className="font-semibold text-gray-600">Resolved:</span> {c.outcome.resolutionDays} days</span>
+            )}
+          </div>
+          <button
+            onClick={onClose}
+            className="text-xs font-semibold text-gray-600 bg-white border border-gray-200 px-4 py-1.5 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Ensemble score (clickable → opens modal) ──────────────────────────────────
 
 function EnsembleScore({ c, agentData, visible }: {
   c: BECCase
   agentData: Record<AgentId, { score: number; lines: string[] }>
   visible: boolean
 }) {
-  const [disp, setDisp] = useState(0)
+  const [disp,      setDisp]      = useState(0)
+  const [showModal, setShowModal] = useState(false)
   const rafRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -695,60 +962,103 @@ function EnsembleScore({ c, agentData, visible }: {
   if (!visible) return null
 
   const t = c.anomalyScore
-  const col = t>=80?{stroke:'#ef4444',text:'text-red-600',label:'CRITICAL',badge:'bg-red-50 text-red-700 border-red-300'}
-    :t>=65?{stroke:'#f97316',text:'text-orange-600',label:'HIGH',badge:'bg-orange-50 text-orange-700 border-orange-300'}
-    :t>=45?{stroke:'#f59e0b',text:'text-amber-600',label:'MEDIUM',badge:'bg-amber-50 text-amber-700 border-amber-300'}
-    :{stroke:'#10b981',text:'text-emerald-600',label:'LOW',badge:'bg-emerald-50 text-emerald-700 border-emerald-300'}
+  const col = t >= 80 ? { stroke: '#ef4444', text: 'text-red-600',     label: 'CRITICAL', badge: 'bg-red-50 text-red-700 border-red-300'     }
+    : t >= 65         ? { stroke: '#f97316', text: 'text-orange-600',  label: 'HIGH',     badge: 'bg-orange-50 text-orange-700 border-orange-300' }
+    : t >= 45         ? { stroke: '#f59e0b', text: 'text-amber-600',   label: 'MEDIUM',   badge: 'bg-amber-50 text-amber-700 border-amber-300'   }
+    :                   { stroke: '#10b981', text: 'text-emerald-600', label: 'LOW',      badge: 'bg-emerald-50 text-emerald-700 border-emerald-300' }
 
-  const r=38,cx=46,cy=46,circ=2*Math.PI*r,dash=circ*(1-disp/100)
+  const r = 38, cx = 46, cy = 46, circ = 2 * Math.PI * r, dash = circ * (1 - disp / 100)
+
   return (
-    <div className="border-t border-gray-200 bg-gray-50 p-3">
-      <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2 px-1">Orchestrator — Ensemble Score</div>
-      <div className="flex items-center gap-3 mb-3">
-        <svg width="92" height="92" viewBox="0 0 92 92" className="shrink-0">
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e2e8f0" strokeWidth="10" />
-          <circle cx={cx} cy={cy} r={r} fill="none" stroke={col.stroke} strokeWidth="10"
-            strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dash}
-            transform={`rotate(-90 ${cx} ${cy})`}
-            style={{ transition:'stroke-dashoffset 1.1s cubic-bezier(0.34,1.2,0.64,1)' }} />
-          <text x={cx} y={cy-4} textAnchor="middle" fill={col.stroke} fontSize="18" fontWeight="800" fontFamily="ui-monospace,monospace">{disp.toFixed(0)}</text>
-          <text x={cx} y={cy+13} textAnchor="middle" fill="#94a3b8" fontSize="9" fontFamily="ui-monospace,monospace">/100</text>
-        </svg>
-        <div className="flex-1 space-y-1.5">
-          {AGENTS.map(def => {
-            const pct = Math.round(agentData[def.id].score * 100)
-            return (
-              <div key={def.id} className="flex items-center gap-1.5">
-                <span className={clsx('text-[9px] font-bold w-16 shrink-0 truncate', def.accent.text)}>{def.name.split(' ')[0]}</span>
-                <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
-                  <div className={clsx('h-1 rounded-full', def.accent.bar)} style={{ width:`${pct}%` }} />
-                </div>
-                <span className={clsx('text-[9px] font-mono w-5 text-right shrink-0', def.accent.text)}>{pct}</span>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-      <div className="flex items-center gap-2 mb-3">
-        <span className={clsx('text-[10px] font-bold border rounded-full px-2.5 py-1 uppercase tracking-widest', col.badge)}>{col.label} RISK</span>
-        <span className="text-[10px] text-gray-400 font-mono ml-auto">{c.status.toUpperCase()}</span>
-      </div>
-
-      {/* Risk flags + investigator summary */}
-      {c.riskFlags.length > 0 && (
-        <div className="pt-2.5 border-t border-gray-200">
-          <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Why this is risky</div>
-          <div className="flex flex-wrap gap-1 mb-2">
-            {c.riskFlags.map((f, i) => (
-              <span key={i} className="text-[9px] px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded font-medium leading-relaxed">
-                {f}
-              </span>
-            ))}
-          </div>
-          <p className="text-[10px] text-gray-500 leading-relaxed">{c.outcome.investigatorNotes}</p>
-        </div>
+    <>
+      {showModal && (
+        <EnsembleScoreModal c={c} agentData={agentData} onClose={() => setShowModal(false)} />
       )}
-    </div>
+
+      <div className="border-t border-gray-200 bg-gray-50">
+        {/* Clickable header strip */}
+        <button
+          onClick={() => setShowModal(true)}
+          className="w-full flex items-center justify-between px-3 pt-3 pb-1 hover:bg-white/60 transition-colors group"
+        >
+          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
+            Orchestrator — Ensemble Score
+          </span>
+          <span className="flex items-center gap-1 text-[9px] text-blue-500 font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
+            Full analysis <ChevronRight className="w-3 h-3" />
+          </span>
+        </button>
+
+        {/* Gauge row — clicking anywhere opens the modal */}
+        <button
+          onClick={() => setShowModal(true)}
+          className="w-full flex items-center gap-3 px-3 pb-2 pt-1 hover:bg-white/60 transition-colors cursor-pointer group"
+        >
+          <svg width="92" height="92" viewBox="0 0 92 92" className="shrink-0">
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke="#e2e8f0" strokeWidth="10" />
+            <circle cx={cx} cy={cy} r={r} fill="none" stroke={col.stroke} strokeWidth="10"
+              strokeLinecap="round" strokeDasharray={circ} strokeDashoffset={dash}
+              transform={`rotate(-90 ${cx} ${cy})`}
+              style={{ transition: 'stroke-dashoffset 1.1s cubic-bezier(0.34,1.2,0.64,1)' }} />
+            <text x={cx} y={cy - 4} textAnchor="middle" fill={col.stroke} fontSize="18" fontWeight="800" fontFamily="ui-monospace,monospace">{disp.toFixed(0)}</text>
+            <text x={cx} y={cy + 13} textAnchor="middle" fill="#94a3b8" fontSize="9" fontFamily="ui-monospace,monospace">/100</text>
+          </svg>
+          <div className="flex-1 space-y-1.5 text-left">
+            {AGENTS.map(def => {
+              const pct = Math.round(agentData[def.id].score * 100)
+              return (
+                <div key={def.id} className="flex items-center gap-1.5">
+                  <span className={clsx('text-[9px] font-bold w-16 shrink-0 truncate', def.accent.text)}>
+                    {def.name.split(' ')[0]}
+                  </span>
+                  <div className="flex-1 h-1 bg-gray-200 rounded-full overflow-hidden">
+                    <div className={clsx('h-1 rounded-full', def.accent.bar)} style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className={clsx('text-[9px] font-mono w-5 text-right shrink-0', def.accent.text)}>{pct}</span>
+                </div>
+              )
+            })}
+          </div>
+        </button>
+
+        <div className="px-3 pb-3">
+          <div className="flex items-center gap-2">
+            <span className={clsx('text-[10px] font-bold border rounded-full px-2.5 py-1 uppercase tracking-widest', col.badge)}>
+              {col.label} RISK
+            </span>
+            <span className="text-[10px] text-gray-400 font-mono ml-auto">{c.status.toUpperCase()}</span>
+          </div>
+
+          {c.riskFlags.length > 0 && (
+            <div className="pt-2.5 mt-2 border-t border-gray-200">
+              <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Why this is risky</div>
+              <div className="flex flex-wrap gap-1 mb-2">
+                {c.riskFlags.slice(0, 4).map((f, i) => (
+                  <span key={i} className="text-[9px] px-1.5 py-0.5 bg-red-50 text-red-700 border border-red-200 rounded font-medium leading-relaxed">
+                    {f}
+                  </span>
+                ))}
+                {c.riskFlags.length > 4 && (
+                  <button
+                    onClick={() => setShowModal(true)}
+                    className="text-[9px] px-1.5 py-0.5 bg-gray-100 text-blue-500 border border-gray-200 rounded font-semibold hover:bg-blue-50 transition-colors"
+                  >
+                    +{c.riskFlags.length - 4} more
+                  </button>
+                )}
+              </div>
+              <p className="text-[10px] text-gray-500 leading-relaxed line-clamp-3">{c.outcome.investigatorNotes}</p>
+              <button
+                onClick={() => setShowModal(true)}
+                className="mt-2 text-[9px] text-blue-500 hover:text-blue-700 font-semibold flex items-center gap-0.5 transition-colors"
+              >
+                View full risk analysis <ChevronRight className="w-2.5 h-2.5" />
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   )
 }
 
