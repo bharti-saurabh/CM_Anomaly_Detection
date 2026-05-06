@@ -108,7 +108,8 @@ function buildFeedSequence(c: BECCase): FeedField[] {
     { category: 'Payment Instruction', label: 'Device fingerprint', value: i.deviceFingerprint,                                                     mono: true                                          },
 
     // ── Identity & Session ────────────────────────────────────────────────────
-    { category: 'Identity & Session', label: 'Submitted by',        value: id.submittingUser                                                                                          },
+    { category: 'Identity & Session', label: 'Wire operator',       value: id.submittingUser                                                                                          },
+    { category: 'Identity & Session', label: 'Role (BNY)',          value: id.submittingUserRole                                                                                      },
     { category: 'Identity & Session', label: 'User ID',             value: id.userId,                                                               mono: true                        },
     { category: 'Identity & Session', label: 'Login time',          value: id.loginTime                                                                                               },
     { category: 'Identity & Session', label: 'Login location',      value: id.loginLocation,                                                        risk: id.loginLocation !== id.expectedLocation ? 'high' : undefined },

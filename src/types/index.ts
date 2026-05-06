@@ -218,6 +218,7 @@ export interface BECRelationship {
 
 export interface BECIdentity {
   submittingUser: string
+  submittingUserRole: string
   userId: string
   loginTime: string
   deviceIsNew: boolean

@@ -109,6 +109,7 @@ export const BEC_CASES: BECCase[] = [
 
     identity: {
       submittingUser: 'Jennifer Morrison',
+      submittingUserRole: 'Treasury Operations Analyst',
       userId: 'USR-4471',
       loginTime: d('2024-05-01 16:39'),
       deviceIsNew: true,
@@ -188,7 +189,7 @@ export const BEC_CASES: BECCase[] = [
       recoveredAmount: null,
       modelFeedbackLabel: 'confirmed_fraud',
       addedToTrainingData: true,
-      investigatorNotes: 'Classic CEO impersonation. Domain apex-global.co registered 11 days prior targeting apex-global.com. Sender IP traced to Eastern European botnet (AS197695 REG.RU). Submitting user accessed from Frankfurt — confirmed via badge records she was in New York office. Forwarded to financial crimes unit.',
+      investigatorNotes: 'Classic CFO impersonation. Domain apex-global.co registered 11 days prior targeting apex-global.com. Sender IP traced to Eastern European botnet (AS197695 REG.RU). Submitting user accessed from Frankfurt — confirmed via badge records she was in New York office. Forwarded to financial crimes unit.',
       resolutionDays: 1,
     },
   },
@@ -287,6 +288,7 @@ export const BEC_CASES: BECCase[] = [
 
     identity: {
       submittingUser: 'Thomas Nielsen',
+      submittingUserRole: 'Treasury Operations Associate',
       userId: 'USR-3892',
       loginTime: d('2024-04-29 10:51'),
       deviceIsNew: false,
@@ -462,6 +464,7 @@ export const BEC_CASES: BECCase[] = [
 
     identity: {
       submittingUser: 'Claire Bennett',
+      submittingUserRole: 'Accounts Payable Specialist',
       userId: 'USR-2219',
       loginTime: d('2024-04-26 13:44'),
       deviceIsNew: false,
@@ -639,6 +642,7 @@ export const BEC_CASES: BECCase[] = [
 
     identity: {
       submittingUser: 'William Forsythe',
+      submittingUserRole: 'Senior Treasury Manager',
       userId: 'USR-5581',
       loginTime: d('2024-04-23 16:51'),
       deviceIsNew: false,
@@ -815,6 +819,7 @@ export const BEC_CASES: BECCase[] = [
 
     identity: {
       submittingUser: 'Karen Rodriguez',
+      submittingUserRole: 'Payroll Operations Analyst',
       userId: 'USR-1847',
       loginTime: d('2024-04-20 08:59'),
       deviceIsNew: false,
@@ -993,6 +998,7 @@ export const BEC_CASES: BECCase[] = [
 
     identity: {
       submittingUser: 'Diana Harrington',
+      submittingUserRole: 'Client Services Manager',
       userId: 'USR-6634',
       loginTime: d('2024-04-17 15:36'),
       deviceIsNew: true,
@@ -1172,6 +1178,7 @@ export const BEC_CASES: BECCase[] = [
 
     identity: {
       submittingUser: 'Nana Osei',
+      submittingUserRole: 'Trade Finance Analyst',
       userId: 'USR-3301',
       loginTime: d('2024-04-14 09:47'),
       deviceIsNew: false,
@@ -1346,6 +1353,7 @@ export const BEC_CASES: BECCase[] = [
 
     identity: {
       submittingUser: 'Sandra Harrington',
+      submittingUserRole: 'Real Estate Settlement Officer',
       userId: 'USR-2984',
       loginTime: d('2024-04-10 12:38'),
       deviceIsNew: false,
@@ -1525,6 +1533,7 @@ export const BEC_CASES: BECCase[] = [
 
     identity: {
       submittingUser: 'Hiroshi Nakamura',
+      submittingUserRole: 'Correspondent Banking Analyst',
       userId: 'USR-4419',
       loginTime: d('2024-04-07 08:29'),
       deviceIsNew: false,
@@ -1702,6 +1711,7 @@ export const BEC_CASES: BECCase[] = [
 
     identity: {
       submittingUser: 'Patricia Harrington',
+      submittingUserRole: 'Wealth Management Associate',
       userId: 'USR-1009',
       loginTime: d('2024-04-02 11:31'),
       deviceIsNew: false,
