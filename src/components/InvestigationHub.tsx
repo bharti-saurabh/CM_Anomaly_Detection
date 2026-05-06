@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   Mail, CreditCard, Fingerprint, Network, ShieldCheck, Cpu,
   AlertTriangle, Globe, MapPin, Monitor, UserX, Zap, Activity,
-  Lock, Clock, Hash, ArrowUpRight, X, ChevronRight,
+  Lock, Clock, Hash, ArrowUpRight, X, ChevronRight, Search,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { BEC_CASES } from '../data/becCases'
@@ -1110,17 +1110,13 @@ function EnsembleScore({ c, agentData, visible }: {
 // ── Case list row ─────────────────────────────────────────────────────────────
 
 function CaseRow({ c, selected, onSelect }: { c: BECCase; selected: boolean; onSelect: () => void }) {
-  const dot = c.severity==='critical'?'bg-red-500':c.severity==='high'?'bg-orange-500':'bg-amber-400'
-  const txt = c.severity==='critical'?'text-red-600':c.severity==='high'?'text-orange-600':'text-amber-600'
   return (
     <button onClick={onSelect} className={clsx('w-full text-left px-4 py-3 border-b border-gray-100 transition-all', selected?'bg-blue-50 border-l-2 border-l-blue-500':'hover:bg-gray-50')}>
       <div className="flex items-center gap-2 mb-1">
-        <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', dot)} />
         <span className="font-mono text-[10px] text-gray-500 flex-1 truncate">{c.id}</span>
-        <span className={clsx('text-[9px] font-bold uppercase', txt)}>{c.severity}</span>
       </div>
-      <div className="text-xs font-semibold text-gray-800 truncate pl-3.5">{c.relationship.clientName}</div>
-      <div className="text-[11px] text-gray-400 truncate pl-3.5">{c.instruction.currency} {c.instruction.amount.toLocaleString()} · {c.instruction.beneficiaryCountry}</div>
+      <div className="text-xs font-semibold text-gray-800 truncate">{c.relationship.clientName}</div>
+      <div className="text-[11px] text-gray-400 truncate">{c.instruction.currency} {c.instruction.amount.toLocaleString()} · {c.instruction.beneficiaryCountry}</div>
     </button>
   )
 }
@@ -1147,7 +1143,7 @@ function DetectionLayout({ c, selectedAgent, onAgentClick }: {
   useEffect(() => {
     if (!dispatched) return
     const T: ReturnType<typeof setTimeout>[] = []
-    T.push(setTimeout(() => setOrchLine(`Initiating BEC detection — ${c.id} · ${c.relationship.clientName} · dispatching 5 agents…`), 120))
+    T.push(setTimeout(() => setOrchLine(`Email from ${c.email.senderAddress} intercepted — assessing BEC threat indicators for ${c.relationship.clientName}. Activating 5 specialist agents…`), 120))
     const start = 500
     AGENTS.forEach((def, ai) => {
       const data = agentData[def.id]
@@ -1180,11 +1176,19 @@ function DetectionLayout({ c, selectedAgent, onAgentClick }: {
         {/* Email + signal cards — shrinks when agent detail is open */}
         <div className={clsx('flex flex-col overflow-hidden transition-all duration-300', selectedAgent ? 'w-[52%]' : 'flex-1')}>
           <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-200 shrink-0">
-            <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', c.severity==='critical'?'bg-red-500':c.severity==='high'?'bg-orange-500':'bg-amber-400')} />
             <span className="font-mono text-[10px] text-gray-400">{c.id}</span>
             <span className="text-xs font-bold text-gray-800">{c.relationship.clientName}</span>
             <span className="text-gray-300">·</span>
             <span className="text-[11px] text-gray-400">{c.email.receivedAt}</span>
+            {!dispatched && (
+              <button
+                onClick={() => setDispatched(true)}
+                className="ml-auto flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors shadow-sm shadow-blue-200"
+              >
+                <Search className="w-3.5 h-3.5" />
+                Investigate
+              </button>
+            )}
           </div>
           <div className="flex-1 overflow-hidden min-h-0">
             <EmailPanel c={c} activeEntities={activeEnts} activePhrases={phrases} />
@@ -1219,24 +1223,12 @@ function DetectionLayout({ c, selectedAgent, onAgentClick }: {
               Orchestrator
             </span>
           </div>
-          {!dispatched ? (
-            <>
-              <div className="text-[10px] font-mono text-gray-400 pl-4 mb-2">
-                Case loaded — 5 agents ready for dispatch
-              </div>
-              <button
-                onClick={() => setDispatched(true)}
-                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded-lg transition-colors shadow-sm shadow-blue-200"
-              >
-                <Cpu className="w-3.5 h-3.5" />
-                Dispatch 5 Agents
-              </button>
-            </>
-          ) : (
-            <div className="text-[10px] font-mono text-gray-500 leading-relaxed pl-4">
-              {orchLine || 'Initializing…'}
-            </div>
-          )}
+          <div className="text-[10px] font-mono leading-relaxed pl-4">
+            {dispatched
+              ? <span className="text-gray-500">{orchLine || 'Initializing…'}</span>
+              : <span className="text-gray-400">Select a case and click Investigate to begin analysis.</span>
+            }
+          </div>
         </div>
 
         {dispatched && (

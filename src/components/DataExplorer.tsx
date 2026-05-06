@@ -315,8 +315,6 @@ function DataFeedPanel({ fields, visibleCount }: { fields: FeedField[]; visibleC
 // ── Case list item ────────────────────────────────────────────────────────────
 
 function CaseListItem({ c, isSelected, onSelect }: { c: BECCase; isSelected: boolean; onSelect: () => void }) {
-  const dot = c.severity === 'critical' ? 'bg-red-500' : c.severity === 'high' ? 'bg-orange-500' : 'bg-amber-400'
-  const sev = c.severity === 'critical' ? 'text-red-600' : c.severity === 'high' ? 'text-orange-600' : 'text-amber-600'
   return (
     <button
       onClick={onSelect}
@@ -326,12 +324,10 @@ function CaseListItem({ c, isSelected, onSelect }: { c: BECCase; isSelected: boo
       )}
     >
       <div className="flex items-center gap-2 mb-1">
-        <span className={clsx('w-1.5 h-1.5 rounded-full shrink-0', dot)} />
         <span className="text-[10px] font-mono text-slate-400 flex-1 truncate">{c.id}</span>
-        <span className={clsx('text-[9px] font-bold uppercase shrink-0', sev)}>{c.severity}</span>
       </div>
-      <div className="text-xs font-semibold text-slate-800 truncate pl-3.5">{c.relationship.clientName}</div>
-      <div className="text-[11px] text-slate-400 truncate pl-3.5 mt-0.5">{c.email.subject}</div>
+      <div className="text-xs font-semibold text-slate-800 truncate">{c.relationship.clientName}</div>
+      <div className="text-[11px] text-slate-400 truncate mt-0.5">{c.email.subject}</div>
     </button>
   )
 }
