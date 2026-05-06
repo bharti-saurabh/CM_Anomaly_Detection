@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Database } from 'lucide-react'
+import { Database, Zap } from 'lucide-react'
 import clsx from 'clsx'
 import { BEC_CASES } from '../data/becCases'
 import type { BECCase } from '../types'
@@ -340,25 +340,28 @@ function CaseListItem({ c, isSelected, onSelect }: { c: BECCase; isSelected: boo
 const FIELD_INTERVAL_MS = 160
 
 export function DataExplorer() {
-  const [selected,     setSelected]     = useState<BECCase>(BEC_CASES[0])
-  const [search,       setSearch]       = useState('')
-  const [fields,       setFields]       = useState<FeedField[]>(() => buildFeedSequence(BEC_CASES[0]))
-  const [visibleCount, setVisibleCount] = useState(0)
+  const [selected,          setSelected]          = useState<BECCase | null>(null)
+  const [search,            setSearch]            = useState('')
+  const [fields,            setFields]            = useState<FeedField[]>([])
+  const [visibleCount,      setVisibleCount]      = useState(0)
+  const [extractionStarted, setExtractionStarted] = useState(false)
 
-  // Kick off extraction sequence on case change
+  // Reset whenever a new case is selected
   useEffect(() => {
+    if (!selected) return
     setFields(buildFeedSequence(selected))
     setVisibleCount(0)
+    setExtractionStarted(false)
   }, [selected])
 
-  // Tick visible count forward
+  // Tick visible count forward only once extraction is triggered
   useEffect(() => {
+    if (!extractionStarted) return
     if (visibleCount >= fields.length) return
     const t = setTimeout(() => setVisibleCount(v => v + 1), FIELD_INTERVAL_MS)
     return () => clearTimeout(t)
-  }, [visibleCount, fields.length])
+  }, [visibleCount, fields.length, extractionStarted])
 
-  // Derive which entity types are currently active
   const activeEntities = new Set(
     fields.slice(0, visibleCount).flatMap(f => f.activatesEntity ? [f.activatesEntity] : [])
   )
@@ -370,6 +373,12 @@ export function DataExplorer() {
     c.email.subject.toLowerCase().includes(search.toLowerCase())
   )
 
+  const handleSelect = (c: BECCase) => {
+    if (selected?.id !== c.id) setSelected(c)
+  }
+
+  const handleExtract = () => setExtractionStarted(true)
+
   return (
     <div className="flex-1 flex flex-col bg-slate-50 overflow-hidden">
 
@@ -379,10 +388,23 @@ export function DataExplorer() {
           <div className="flex items-center gap-1.5">
             <Database className="w-4 h-4 text-blue-500" />
             <h1 className="text-sm font-bold text-slate-900">Data Explorer</h1>
-            <span className="text-xs text-slate-400 ml-1">— real-time extraction from 14 connected sources</span>
+            <span className="text-xs text-slate-400 ml-1">— 14 connected sources</span>
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <span className="text-[10px] font-mono text-slate-400">{visibleCount}/{fields.length} signals extracted</span>
+            {selected && extractionStarted && (
+              <span className="text-[10px] font-mono text-slate-400">
+                {visibleCount}/{fields.length} signals extracted
+              </span>
+            )}
+            {selected && !extractionStarted && (
+              <button
+                onClick={handleExtract}
+                className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Zap className="w-3.5 h-3.5" />
+                Extract Signals
+              </button>
+            )}
             <input
               type="text"
               value={search}
@@ -394,39 +416,82 @@ export function DataExplorer() {
         </div>
       </div>
 
-      {/* 3-column body */}
+      {/* Body */}
       <div className="flex-1 flex overflow-hidden">
 
-        {/* Left: case list */}
+        {/* Left: case list — always visible */}
         <div className="w-52 shrink-0 border-r border-slate-200 bg-white overflow-y-auto">
           {filtered.map(c => (
             <CaseListItem
               key={c.id}
               c={c}
-              isSelected={selected.id === c.id}
-              onSelect={() => { if (c.id !== selected.id) setSelected(c) }}
+              isSelected={selected?.id === c.id}
+              onSelect={() => handleSelect(c)}
             />
           ))}
         </div>
 
-        {/* Middle: email */}
-        <div className="flex-1 border-r border-slate-200 overflow-hidden min-w-0">
-          <EmailViewer c={selected} activeEntities={activeEntities} />
-        </div>
-
-        {/* Right: data feed */}
-        <div className="w-80 shrink-0 bg-white flex flex-col overflow-hidden">
-          <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50 shrink-0 flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Extracted Signals</span>
-            <span className={clsx(
-              'text-[10px] font-mono',
-              visibleCount >= fields.length ? 'text-emerald-600 font-semibold' : 'text-blue-500'
-            )}>
-              {visibleCount >= fields.length ? 'Complete' : `${visibleCount}/${fields.length}`}
-            </span>
+        {/* No case selected — placeholder */}
+        {!selected && (
+          <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-10">
+            <div className="w-14 h-14 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-center">
+              <Database className="w-7 h-7 text-slate-300" />
+            </div>
+            <div className="text-sm font-semibold text-slate-500">Select a case to inspect</div>
+            <div className="text-xs text-slate-400 max-w-xs">
+              Click any case on the left to view the intercepted email, then extract signals from 14 connected sources.
+            </div>
           </div>
-          <DataFeedPanel fields={fields} visibleCount={visibleCount} />
-        </div>
+        )}
+
+        {/* Case selected — email + right panel */}
+        {selected && (
+          <>
+            {/* Middle: email */}
+            <div className="flex-1 border-r border-slate-200 overflow-hidden min-w-0">
+              <EmailViewer c={selected} activeEntities={activeEntities} />
+            </div>
+
+            {/* Right: data feed or pre-extraction prompt */}
+            <div className="w-80 shrink-0 bg-white flex flex-col overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-slate-200 bg-slate-50 shrink-0 flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-widest">Extracted Signals</span>
+                {extractionStarted && (
+                  <span className={clsx(
+                    'text-[10px] font-mono',
+                    visibleCount >= fields.length ? 'text-emerald-600 font-semibold' : 'text-blue-500'
+                  )}>
+                    {visibleCount >= fields.length ? 'Complete' : `${visibleCount}/${fields.length}`}
+                  </span>
+                )}
+              </div>
+
+              {!extractionStarted ? (
+                <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 text-center">
+                  <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-100 flex items-center justify-center">
+                    <Zap className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-semibold text-slate-700 mb-1">Ready to extract</div>
+                    <div className="text-[10px] text-slate-400">{fields.length} signals across 6 categories</div>
+                  </div>
+                  <button
+                    onClick={handleExtract}
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2.5 rounded-lg transition-colors shadow-sm shadow-blue-200"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    Extract Signals
+                  </button>
+                  <p className="text-[10px] text-slate-400 leading-relaxed">
+                    Queries email forensics, NLP, payment, identity, counterparty, and external intelligence sources.
+                  </p>
+                </div>
+              ) : (
+                <DataFeedPanel fields={fields} visibleCount={visibleCount} />
+              )}
+            </div>
+          </>
+        )}
 
       </div>
     </div>

@@ -87,9 +87,29 @@ function buildSignalCards(c: BECCase): SCard[] {
   return cards.slice(0, 10)
 }
 
+// ── Computation metadata ──────────────────────────────────────────────────────
+
+function agentMeta(c: BECCase, agentId: AgentId): { ms: number; tokens: number } {
+  const seed = c.anomalyScore * 7 + (c.id.charCodeAt(c.id.length - 1) || 37)
+  const pick = (lo: number, hi: number, salt: number) =>
+    lo + Math.round(((seed * salt) % (hi - lo + 1)))
+  const bases: Record<AgentId, [number, number, number, number, number]> = {
+    email:    [820,  1480, 3, 580, 320],
+    payment:  [180,   420, 7,   0,   0],
+    identity: [260,   580, 11,  0,   0],
+    graph:    [740,  1320, 5, 420, 280],
+    intel:    [340,   720, 13,160, 240],
+  }
+  const [msLo, msHi, msSalt, tokBase, tokRange] = bases[agentId]
+  return {
+    ms:     pick(msLo, msHi, msSalt),
+    tokens: tokBase > 0 ? pick(tokBase, tokBase + tokRange, msSalt + 2) : 0,
+  }
+}
+
 // ── Agent score computation ───────────────────────────────────────────────────
 
-function computeAgentData(c: BECCase): Record<AgentId, { score: number; lines: string[] }> {
+function computeAgentData(c: BECCase): Record<AgentId, { score: number; lines: string[]; ms: number; tokens: number }> {
   const { email: e, nlpAnalysis: n, externalIntel: ei, instruction: i, identity: id, relationship: r } = c
   let es=0; es+=Math.min(n.urgencyPhrases.length*.11,.33); es+=Math.min(n.overridePhrases.length*.14,.28); es+=(1-n.writingStyleConsistency)*.21; es+=ei.emailDomainIsLookalike?.26:0; es+=e.senderDomainAgeDays<90?.14:e.senderDomainAgeDays<180?.07:0; es+=e.dkim==='fail'?.06:0
   let ps=0; ps+=Math.min((i.amountDeviationFactor-1)/11,1)*.32; ps+=i.beneficiaryIsNew?.28:0; ps+=i.submittedOutsideHours?.14:0; ps+=i.roundNumberFlag?.13:0; ps+=i.belowThresholdFlag?.13:0
@@ -97,11 +117,11 @@ function computeAgentData(c: BECCase): Record<AgentId, { score: number; lines: s
   const cb=r.typicalCountries.includes(i.beneficiaryCountry); let gs=0; gs+=ei.beneficiaryFraudFlag?.38:0; gs+=ei.emailDomainIsLookalike?.22:0; gs+=!cb?.22:0; gs+=ei.ipFlagged?.18:0
   let ns=0; ns+=ei.ofacMatch?.40:0; ns+=ei.fincenMatch?.28:0; ns+=ei.swiftControlsFlag?.22:0; if(ns<.12&&!cb) ns+=.20
   return {
-    email:    { score:Math.min(1,es), lines:[ `Loading ${r.clientName} baseline — ${n.histStyleBaselineSamples} emails`, `Urgency: ${n.urgencyPhrases.length} · Secrecy: ${n.secrecyPhrases.length} · Override: ${n.overridePhrases.length}`, ei.emailDomainIsLookalike?`Lookalike: ${e.senderAddress.split('@')[1]} ↔ ${ei.lookalikeDomain}`:`Domain check — no lookalike detected`, `Style match: ${Math.round(n.writingStyleConsistency*100)}% — ${n.writingStyleConsistency<.55?'anomalous authorship':'within range'}`, `DKIM ${e.dkim.toUpperCase()} · SPF ${e.spf.toUpperCase()} · DMARC ${e.dmarc.toUpperCase()} · domain ${e.senderDomainAgeDays}d` ] },
-    payment:  { score:Math.min(1,ps), lines:[ `Instruction: ${i.currency} ${i.amount.toLocaleString()} → ${i.beneficiaryName}`, `Amount: ${i.amountDeviationFactor.toFixed(1)}× avg — ${i.amountDeviationFactor>5?'extreme outlier':i.amountDeviationFactor>2?'elevated':'normal'}`, `Beneficiary: ${i.beneficiaryIsNew?'FIRST-OCCURRENCE · absent from registry':'known counterparty'}`, `${i.submittedOutsideHours?'OFF-HOURS':'Standard hours'} · ${i.approvalWorkflowMinutes}min · dual-auth: ${i.dualAuthFollowed?'yes':'BYPASSED'}`, `Round-number: ${i.roundNumberFlag?'YES':'no'} · Below-threshold: ${i.belowThresholdFlag?'YES':'no'}` ] },
-    identity: { score:Math.min(1,is), lines:[ `User ${id.submittingUser} · ${id.loginTime}`, `Device: ${id.deviceIsNew?'NEW — not in registry':'recognised'} · ${id.deviceId.slice(0,18)}`, `Location: ${id.loginLocation} — expected ${id.expectedLocation} · ${lm?'MISMATCH':'match'}`, `MFA: ${id.mfaUsed?id.mfaMethod:'NOT USED'} · VPN: ${id.vpnDetected?'DETECTED':'none'} · failed: ${id.priorFailedLogins}`, `Approval: ${i.approvalWorkflowMinutes}min${i.selfApproved?' · SELF-APPROVED':''}` ] },
-    graph:    { score:Math.min(1,gs), lines:[ `Graph: ${r.clientName} · ${r.totalPaymentsLast12M} payments · ${r.counterpartyRegistryCount} counterparties`, `${i.beneficiaryName}: ${i.beneficiaryIsNew?'ABSENT — new isolated node':'found in graph'}`, `Fraud network: ${ei.beneficiaryFraudFlag?`FLAGGED — ${ei.beneficiaryFraudSource?.slice(0,30)}`:'no beneficiary match'}`, `Geography: ${i.beneficiaryCountry} ${cb?'within':'OUTSIDE'} baseline (${r.typicalCountries.join(', ')})`, `IP ${e.originatingIP}: ${ei.ipFlagged?`FLAGGED · ${ei.ipAsn.slice(0,28)}`:'no fraud signal'}` ] },
-    intel:    { score:Math.min(1,ns), lines:[ `OFAC: ${ei.ofacMatch?'MATCH FOUND':'clear'} · FinCEN 314(b): ${ei.fincenMatch?'MATCH':'no match'}`, `SWIFT GPI: ${ei.swiftControlsFlag?'CONTROLS ALERT':'no alert'} · country risk: ${ei.beneficiaryBankCountryRisk.split('—')[0].trim()}`, `Fraud flag: ${ei.beneficiaryFraudFlag?`YES — ${(ei.beneficiaryFraudSource??'').slice(0,30)}`:'none'}`, `AML typology: ${ei.emailDomainIsLookalike&&i.beneficiaryIsNew?'BEC-3A':!i.dualAuthFollowed?'BEC-5A':!cb?'BEC-2B':'BEC-1C'}`, `Sanctions: ${ei.sanctionsScreeningResult.slice(0,42)}` ] },
+    email:    { score:Math.min(1,es), ...agentMeta(c,'email'),    lines:[ `Loading ${r.clientName} baseline — ${n.histStyleBaselineSamples} emails`, `Urgency: ${n.urgencyPhrases.length} · Secrecy: ${n.secrecyPhrases.length} · Override: ${n.overridePhrases.length}`, ei.emailDomainIsLookalike?`Lookalike: ${e.senderAddress.split('@')[1]} ↔ ${ei.lookalikeDomain}`:`Domain check — no lookalike detected`, `Style match: ${Math.round(n.writingStyleConsistency*100)}% — ${n.writingStyleConsistency<.55?'anomalous authorship':'within range'}`, `DKIM ${e.dkim.toUpperCase()} · SPF ${e.spf.toUpperCase()} · DMARC ${e.dmarc.toUpperCase()} · domain ${e.senderDomainAgeDays}d` ] },
+    payment:  { score:Math.min(1,ps), ...agentMeta(c,'payment'),  lines:[ `Instruction: ${i.currency} ${i.amount.toLocaleString()} → ${i.beneficiaryName}`, `Amount: ${i.amountDeviationFactor.toFixed(1)}× avg — ${i.amountDeviationFactor>5?'extreme outlier':i.amountDeviationFactor>2?'elevated':'normal'}`, `Beneficiary: ${i.beneficiaryIsNew?'FIRST-OCCURRENCE · absent from registry':'known counterparty'}`, `${i.submittedOutsideHours?'OFF-HOURS':'Standard hours'} · ${i.approvalWorkflowMinutes}min · dual-auth: ${i.dualAuthFollowed?'yes':'BYPASSED'}`, `Round-number: ${i.roundNumberFlag?'YES':'no'} · Below-threshold: ${i.belowThresholdFlag?'YES':'no'}` ] },
+    identity: { score:Math.min(1,is), ...agentMeta(c,'identity'), lines:[ `User ${id.submittingUser} · ${id.loginTime}`, `Device: ${id.deviceIsNew?'NEW — not in registry':'recognised'} · ${id.deviceId.slice(0,18)}`, `Location: ${id.loginLocation} — expected ${id.expectedLocation} · ${lm?'MISMATCH':'match'}`, `MFA: ${id.mfaUsed?id.mfaMethod:'NOT USED'} · VPN: ${id.vpnDetected?'DETECTED':'none'} · failed: ${id.priorFailedLogins}`, `Approval: ${i.approvalWorkflowMinutes}min${i.selfApproved?' · SELF-APPROVED':''}` ] },
+    graph:    { score:Math.min(1,gs), ...agentMeta(c,'graph'),    lines:[ `Graph: ${r.clientName} · ${r.totalPaymentsLast12M} payments · ${r.counterpartyRegistryCount} counterparties`, `${i.beneficiaryName}: ${i.beneficiaryIsNew?'ABSENT — new isolated node':'found in graph'}`, `Fraud network: ${ei.beneficiaryFraudFlag?`FLAGGED — ${ei.beneficiaryFraudSource?.slice(0,30)}`:'no beneficiary match'}`, `Geography: ${i.beneficiaryCountry} ${cb?'within':'OUTSIDE'} baseline (${r.typicalCountries.join(', ')})`, `IP ${e.originatingIP}: ${ei.ipFlagged?`FLAGGED · ${ei.ipAsn.slice(0,28)}`:'no fraud signal'}` ] },
+    intel:    { score:Math.min(1,ns), ...agentMeta(c,'intel'),    lines:[ `OFAC: ${ei.ofacMatch?'MATCH FOUND':'clear'} · FinCEN 314(b): ${ei.fincenMatch?'MATCH':'no match'}`, `SWIFT GPI: ${ei.swiftControlsFlag?'CONTROLS ALERT':'no alert'} · country risk: ${ei.beneficiaryBankCountryRisk.split('—')[0].trim()}`, `Fraud flag: ${ei.beneficiaryFraudFlag?`YES — ${(ei.beneficiaryFraudSource??'').slice(0,30)}`:'none'}`, `AML typology: ${ei.emailDomainIsLookalike&&i.beneficiaryIsNew?'BEC-3A':!i.dualAuthFollowed?'BEC-5A':!cb?'BEC-2B':'BEC-1C'}`, `Sanctions: ${ei.sanctionsScreeningResult.slice(0,42)}` ] },
   }
 }
 
@@ -622,40 +642,49 @@ function SignalCard({ card, active }: { card: SCard; active: boolean }) {
 
 // ── Agent row (right panel, clickable) ───────────────────────────────────────
 
-function AgentRow({ def, lines, score, isSelected, onClick }: {
+function AgentRow({ def, lines, score, ms, isSelected, dispatched, onClick }: {
   def: typeof AGENTS[number]
   lines: string[]
   score: number | null
+  ms: number
   isSelected: boolean
+  dispatched: boolean
   onClick: () => void
 }) {
   const { accent } = def
   const Icon = def.icon
-  const running = lines.length > 0 && score === null
+  const running = dispatched && lines.length > 0 && score === null
   const done = score !== null
   const pct = done ? Math.round(score * 100) : 0
 
   return (
     <button
       onClick={onClick}
+      disabled={!done}
       className={clsx(
-        'w-full text-left rounded-xl border px-3 py-2.5 transition-all duration-200 cursor-pointer',
-        isSelected
-          ? clsx(accent.border, 'bg-blue-50 ring-1', accent.border.replace('border-', 'ring-'))
-          : done ? clsx(accent.border, 'bg-white hover:bg-gray-50 shadow-sm')
-          : running ? 'border-gray-300 bg-white hover:bg-gray-50'
-          : 'border-gray-100 bg-gray-50 opacity-40 pointer-events-none'
+        'w-full text-left rounded-xl border px-3 py-2.5 transition-all duration-200',
+        done && isSelected ? clsx(accent.border, 'bg-blue-50 ring-1', accent.border.replace('border-', 'ring-'))
+          : done          ? clsx(accent.border, 'bg-white hover:bg-gray-50 shadow-sm cursor-pointer')
+          : running       ? 'border-gray-300 bg-white'
+          : 'border-gray-100 bg-gray-50 opacity-40 cursor-default'
       )}
     >
       <div className="flex items-center gap-2 mb-1.5">
-        <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0', done ? accent.dot : running ? clsx(accent.dot, 'animate-pulse') : 'bg-gray-300')} />
-        <Icon className={clsx('w-3 h-3 shrink-0', accent.text)} />
-        <span className={clsx('text-[11px] font-bold flex-1 truncate', accent.text)}>{def.name}</span>
-        {done && <span className={clsx('text-sm font-bold font-mono shrink-0', accent.text)}>{pct}</span>}
+        <div className={clsx('w-1.5 h-1.5 rounded-full shrink-0',
+          done ? accent.dot : running ? clsx(accent.dot, 'animate-pulse') : 'bg-gray-300'
+        )} />
+        <Icon className={clsx('w-3 h-3 shrink-0', done || running ? accent.text : 'text-gray-300')} />
+        <span className={clsx('text-[11px] font-bold flex-1 truncate', done || running ? accent.text : 'text-gray-300')}>
+          {def.name}
+        </span>
+        {done    && <span className={clsx('text-sm font-bold font-mono shrink-0', accent.text)}>{pct}</span>}
         {running && <span className="text-[9px] text-gray-400 font-mono animate-pulse">ANALYZING</span>}
+        {!dispatched && <span className="text-[9px] text-gray-300 font-mono">READY</span>}
       </div>
       <div className="pl-5 mb-1.5 min-h-[2rem]">
-        <div className="text-[10px] font-mono text-gray-400 leading-relaxed line-clamp-2">{lines[lines.length - 1] ?? ''}</div>
+        <div className="text-[10px] font-mono text-gray-400 leading-relaxed line-clamp-2">
+          {lines[lines.length - 1] ?? (dispatched ? '' : def.model)}
+        </div>
       </div>
       {done && (
         <div className="pl-5 flex items-center gap-1.5">
@@ -663,6 +692,7 @@ function AgentRow({ def, lines, score, isSelected, onClick }: {
             <div className={clsx('h-1 rounded-full transition-all duration-700', accent.bar)} style={{ width: `${pct}%` }} />
           </div>
           <span className="text-[9px] text-gray-400 font-mono shrink-0">{pct}/100</span>
+          <span className="text-[9px] text-gray-300 font-mono shrink-0">{ms.toLocaleString()}ms</span>
           {isSelected && <span className={clsx('text-[9px] shrink-0 font-bold ml-1', accent.text)}>← viewing</span>}
         </div>
       )}
@@ -674,7 +704,7 @@ function AgentRow({ def, lines, score, isSelected, onClick }: {
 
 function EnsembleScoreModal({ c, agentData, onClose }: {
   c: BECCase
-  agentData: Record<AgentId, { score: number; lines: string[] }>
+  agentData: Record<AgentId, { score: number; lines: string[]; ms: number; tokens: number }>
   onClose: () => void
 }) {
   const t = c.anomalyScore
@@ -940,7 +970,7 @@ function EnsembleScoreModal({ c, agentData, onClose }: {
 
 function EnsembleScore({ c, agentData, visible }: {
   c: BECCase
-  agentData: Record<AgentId, { score: number; lines: string[] }>
+  agentData: Record<AgentId, { score: number; lines: string[]; ms: number; tokens: number }>
   visible: boolean
 }) {
   const [disp,      setDisp]      = useState(0)
@@ -1056,6 +1086,20 @@ function EnsembleScore({ c, agentData, visible }: {
               </button>
             </div>
           )}
+
+          {/* Computation metadata */}
+          <div className="mt-2.5 pt-2 border-t border-gray-200">
+            {(() => {
+              const totalMs     = AGENTS.reduce((s, a) => s + agentData[a.id].ms, 0)
+              const totalTokens = AGENTS.reduce((s, a) => s + agentData[a.id].tokens, 0)
+              return (
+                <div className="text-[9px] font-mono text-gray-300 leading-relaxed space-y-0.5">
+                  <div>Analyzed in <span className="text-gray-400">{totalMs.toLocaleString()}ms</span> · <span className="text-gray-400">{totalTokens.toLocaleString()}</span> tokens</div>
+                  <div>Model: XGBoost · BERT · GNN · Isolation Forest</div>
+                </div>
+              )
+            })()}
+          </div>
         </div>
       </div>
     </>
@@ -1090,6 +1134,7 @@ function DetectionLayout({ c, selectedAgent, onAgentClick }: {
   const signalCards = buildSignalCards(c)
   const agentData   = computeAgentData(c)
 
+  const [dispatched,  setDispatched]  = useState(false)
   const [agentLines,  setAgentLines]  = useState<Record<AgentId, string[]>>({ email:[],payment:[],identity:[],graph:[],intel:[] })
   const [agentScores, setAgentScores] = useState<Record<AgentId, number | null>>({ email:null,payment:null,identity:null,graph:null,intel:null })
   const [activeEnts,  setActiveEnts]  = useState<Set<string>>(new Set())
@@ -1099,6 +1144,7 @@ function DetectionLayout({ c, selectedAgent, onAgentClick }: {
   const [ensembleVis, setEnsembleVis] = useState(false)
 
   useEffect(() => {
+    if (!dispatched) return
     const T: ReturnType<typeof setTimeout>[] = []
     T.push(setTimeout(() => setOrchLine(`Initiating BEC detection — ${c.id} · ${c.relationship.clientName} · dispatching 5 agents…`), 120))
     const start = 500
@@ -1123,7 +1169,7 @@ function DetectionLayout({ c, selectedAgent, onAgentClick }: {
     const allDone = start + 400*4 + 5*600 + 600 + 1200
     T.push(setTimeout(() => setEnsembleVis(true), allDone))
     return () => T.forEach(clearTimeout)
-  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dispatched])  // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -1163,18 +1209,41 @@ function DetectionLayout({ c, selectedAgent, onAgentClick }: {
 
       {/* Right panel — agents + ensemble */}
       <div className="w-72 shrink-0 flex flex-col overflow-hidden bg-white border-l border-gray-200">
-        {orchLine && (
-          <div className="px-3 py-2 border-b border-gray-200 bg-gray-50 shrink-0">
-            <div className="flex items-center gap-1.5 mb-1">
-              <Cpu className="w-3 h-3 text-emerald-600" />
-              <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest">Orchestrator</span>
+
+        {/* Orchestrator header — dispatch button or running status */}
+        <div className="px-3 py-2.5 border-b border-gray-200 bg-gray-50 shrink-0">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Cpu className={clsx('w-3 h-3', dispatched ? 'text-emerald-600' : 'text-gray-400')} />
+            <span className={clsx('text-[9px] font-bold uppercase tracking-widest', dispatched ? 'text-emerald-600' : 'text-gray-400')}>
+              Orchestrator
+            </span>
+          </div>
+          {!dispatched ? (
+            <>
+              <div className="text-[10px] font-mono text-gray-400 pl-4 mb-2">
+                Case loaded — 5 agents ready for dispatch
+              </div>
+              <button
+                onClick={() => setDispatched(true)}
+                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 rounded-lg transition-colors shadow-sm shadow-blue-200"
+              >
+                <Cpu className="w-3.5 h-3.5" />
+                Dispatch 5 Agents
+              </button>
+            </>
+          ) : (
+            <div className="text-[10px] font-mono text-gray-500 leading-relaxed pl-4">
+              {orchLine || 'Initializing…'}
             </div>
-            <div className="text-[10px] font-mono text-gray-500 leading-relaxed pl-4">{orchLine}</div>
+          )}
+        </div>
+
+        {dispatched && (
+          <div className="px-3 pt-1.5 pb-1 border-b border-gray-100">
+            <span className="text-[9px] text-gray-400">Click an agent to view its findings alongside the email</span>
           </div>
         )}
-        <div className="px-3 pt-1.5 pb-1 border-b border-gray-100">
-          <span className="text-[9px] text-gray-400">Click an agent to view its findings alongside the email</span>
-        </div>
+
         <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {AGENTS.map(def => (
             <AgentRow
@@ -1182,7 +1251,9 @@ function DetectionLayout({ c, selectedAgent, onAgentClick }: {
               def={def}
               lines={agentLines[def.id]}
               score={agentScores[def.id]}
+              ms={agentData[def.id].ms}
               isSelected={selectedAgent === def.id}
+              dispatched={dispatched}
               onClick={() => onAgentClick(def.id)}
             />
           ))}
